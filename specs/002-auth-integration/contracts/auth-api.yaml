@@ -1,0 +1,294 @@
+openapi: 3.1.0
+info:
+  title: Authentication API
+  version: 1.0.0
+  description: |
+    JWT-based authentication endpoints for the Todo Full-Stack Web Application.
+
+    This API provides user registration and login functionality. Better Auth on the frontend
+    handles the actual authentication flow, but these endpoints document the contract between
+    frontend and backend.
+
+    **Authentication Flow**:
+    1. User registers via POST /api/auth/register
+    2. User logs in via POST /api/auth/login
+    3. Backend returns JWT token
+    4. Frontend includes token in Authorization header for all subsequent requests
+    5. Backend validates token on every protected endpoint
+
+    **JWT Token Format**:
+    - Algorithm: HS256
+    - Claims: user_id, email, iat, exp
+    - Expiration: 1 hour (configurable)
+    - Secret: Shared between frontend (Better Auth) and backend (FastAPI)
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: https://api.example.com
+    description: Production server
+
+paths:
+  /api/auth/register:
+    post:
+      summary: Register a new user
+      description: |
+        Creates a new user account with email and password. Password is hashed with bcrypt
+        before storage. Returns a JWT token on successful registration.
+      operationId: registerUser
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: user@example.com
+              password: SecurePassword123
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                token_type: bearer
+                user:
+                  id: 550e8400-e29b-41d4-a716-446655440000
+                  email: user@example.com
+        '400':
+          description: Invalid input (email format, password strength)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: INVALID_INPUT
+                  message: Invalid email format
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: EMAIL_EXISTS
+                  message: Email already registered
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      summary: Login with email and password
+      description: |
+        Authenticates a user with email and password. Returns a JWT token on successful
+        authentication. Token should be included in Authorization header for all subsequent
+        requests.
+      operationId: loginUser
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: user@example.com
+              password: SecurePassword123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                token_type: bearer
+                user:
+                  id: 550e8400-e29b-41d4-a716-446655440000
+                  email: user@example.com
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: INVALID_CREDENTIALS
+                  message: Invalid email or password
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      summary: Logout (optional)
+      description: |
+        Logs out the current user. Since JWT is stateless, this endpoint is optional.
+        Frontend should clear the stored token. Backend can optionally implement token
+        blacklisting for enhanced security.
+      operationId: logoutUser
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Logged out successfully
+        '401':
+          description: Unauthorized (invalid or missing token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User's email address (must be unique)
+          example: user@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: User's password (will be hashed with bcrypt)
+          example: SecurePassword123
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: user@example.com
+        password:
+          type: string
+          description: User's password
+          example: SecurePassword123
+
+    AuthResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - user
+      properties:
+        access_token:
+          type: string
+          description: JWT access token (include in Authorization header as "Bearer <token>")
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIiwiZW1haWwiOiJ1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxMjM0NTY3ODkwLCJleHAiOjEyMzQ1NzE0OTB9.signature
+        token_type:
+          type: string
+          enum: [bearer]
+          description: Token type (always "bearer")
+          example: bearer
+        user:
+          $ref: '#/components/schemas/UserInfo'
+
+    UserInfo:
+      type: object
+      required:
+        - id
+        - email
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User's unique identifier
+          example: 550e8400-e29b-41d4-a716-446655440000
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: user@example.com
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+          description: Always false for error responses
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              enum:
+                - INVALID_INPUT
+                - EMAIL_EXISTS
+                - INVALID_CREDENTIALS
+                - UNAUTHORIZED
+                - INTERNAL_ERROR
+              example: INVALID_CREDENTIALS
+            message:
+              type: string
+              description: Human-readable error message
+              example: Invalid email or password
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from /api/auth/login or /api/auth/register.
+        Include in Authorization header as: Authorization: Bearer <token>
+
+tags:
+  - name: Authentication
+    description: User registration, login, and logout endpoints
+
+externalDocs:
+  description: Feature Specification
+  url: ../spec.md

@@ -1,0 +1,752 @@
+# API Client Contract Specification
+# Feature: 005-chatkit-frontend
+# Phase: Phase 1 - Design
+# Date: 2026-02-08
+
+---
+metadata:
+  feature: "005-chatkit-frontend"
+  version: "1.0.0"
+  status: "draft"
+  backend_api_version: "Phase 3 - Complete"
+  authentication: "Better Auth JWT (httpOnly cookie)"
+
+---
+# API Client Interface Specification
+
+## Overview
+
+This contract defines the TypeScript API client interface for the ChatKit frontend. The client provides type-safe methods for interacting with the Phase 3 backend chat API endpoints.
+
+**Key Requirements**:
+- All methods must include authentication credentials (httpOnly cookie)
+- All methods must return typed responses matching backend schemas
+- All methods must handle errors consistently
+- All methods must be async (return Promise)
+
+---
+## Base Configuration
+
+```yaml
+base_url: "${API_BASE_URL}/api/chat"
+authentication:
+  type: "cookie"
+  cookie_name: "auth_token"
+  credentials: "include"
+headers:
+  Content-Type: "application/json"
+  Accept: "application/json"
+timeout: 30000  # 30 seconds
+retry_policy:
+  max_retries: 3
+  retry_on: [500, 502, 503, 504]
+  backoff: "exponential"
+```
+
+---
+## API Methods
+
+### 1. sendMessage
+
+Send a user message to the AI agent for conversational task management.
+
+```yaml
+method: sendMessage
+http_method: POST
+endpoint: "/message"
+description: "Send a message to the AI agent. Creates new conversation if conversation_id not provided."
+
+request:
+  type: "ChatMessageRequest"
+  schema:
+    content:
+      type: "string"
+      required: true
+      min_length: 1
+      max_length: 10000
+      validation: "Cannot be empty or whitespace-only"
+    conversation_id:
+      type: "string"
+      required: false
+      format: "uuid"
+      description: "Optional conversation ID to continue existing conversation"
+
+response:
+  success:
+    status: 200
+    type: "ChatMessageResponse"
+    schema:
+      message:
+        type: "string"
+        description: "AI agent's response message text"
+      tool_calls:
+        type: "array"
+        items: "ToolCall"
+        required: false
+        description: "Optional list of tool invocations performed by the agent"
+      conversation_id:
+        type: "string"
+        format: "uuid"
+        description: "Conversation identifier where this exchange occurred"
+
+  errors:
+    - status: 401
+      code: "UNAUTHORIZED"
+      message: "Authentication required"
+      action: "Redirect to /signin"
+
+    - status: 404
+      code: "NOT_FOUND"
+      message: "Conversation not found"
+      description: "Conversation_id provided but doesn't exist or doesn't belong to user"
+
+    - status: 422
+      code: "VALIDATION_ERROR"
+      message: "Invalid input"
+      description: "Message content validation failed"
+
+    - status: 500
+      code: "INTERNAL_SERVER_ERROR"
+      message: "AI agent execution failed"
+      description: "OpenAI API error or agent processing error"
+
+typescript_signature: |
+  async sendMessage(request: ChatMessageRequest): Promise<ChatMessageResponse>
+
+example_usage: |
+  // New conversation
+  const response = await apiClient.sendMessage({
+    content: "Add a task to buy groceries"
+  });
+  console.log(response.message); // "I've added 'buy groceries' to your task list."
+  console.log(response.conversation_id); // "660e8400-e29b-41d4-a716-446655440001"
+
+  // Continue existing conversation
+  const response2 = await apiClient.sendMessage({
+    content: "Mark that task as complete",
+    conversation_id: "660e8400-e29b-41d4-a716-446655440001"
+  });
+```
+
+---
+### 2. getConversations
+
+Retrieve all conversations for the authenticated user.
+
+```yaml
+method: getConversations
+http_method: GET
+endpoint: "/conversations"
+description: "List user's conversations, ordered by most recent activity"
+
+request:
+  type: "query_parameters"
+  schema:
+    limit:
+      type: "number"
+      required: false
+      default: 50
+      min: 1
+      max: 100
+      description: "Maximum number of conversations to return"
+
+response:
+  success:
+    status: 200
+    type: "ApiResponse<Conversation[]>"
+    schema:
+      success:
+        type: "boolean"
+        value: true
+      data:
+        type: "array"
+        items: "Conversation"
+        description: "List of conversations (without messages)"
+      message:
+        type: "string"
+        value: "Conversations retrieved successfully"
+
+  errors:
+    - status: 401
+      code: "UNAUTHORIZED"
+      message: "Authentication required"
+      action: "Redirect to /signin"
+
+    - status: 422
+      code: "VALIDATION_ERROR"
+      message: "Invalid limit parameter"
+      description: "Limit must be between 1 and 100"
+
+    - status: 500
+      code: "INTERNAL_SERVER_ERROR"
+      message: "Database error"
+      description: "Failed to retrieve conversations"
+
+typescript_signature: |
+  async getConversations(limit?: number): Promise<Conversation[]>
+
+example_usage: |
+  // Get default 50 conversations
+  const conversations = await apiClient.getConversations();
+  console.log(conversations.length); // 0-50
+
+  // Get specific limit
+  const recentConversations = await apiClient.getConversations(10);
+  console.log(recentConversations[0].title); // "Task Management Session"
+```
+
+---
+### 3. getConversation
+
+Retrieve a single conversation with full message history.
+
+```yaml
+method: getConversation
+http_method: GET
+endpoint: "/conversations/{conversation_id}"
+description: "Get a specific conversation by ID with all messages in chronological order"
+
+request:
+  type: "path_parameters"
+  schema:
+    conversation_id:
+      type: "string"
+      required: true
+      format: "uuid"
+      description: "Conversation identifier"
+
+response:
+  success:
+    status: 200
+    type: "ApiResponse<Conversation>"
+    schema:
+      success:
+        type: "boolean"
+        value: true
+      data:
+        type: "Conversation"
+        description: "Conversation with messages array populated"
+        properties:
+          messages:
+            type: "array"
+            items: "Message"
+            description: "Messages in chronological order (oldest first)"
+      message:
+        type: "string"
+        value: "Conversation retrieved successfully"
+
+  errors:
+    - status: 401
+      code: "UNAUTHORIZED"
+      message: "Authentication required"
+      action: "Redirect to /signin"
+
+    - status: 404
+      code: "NOT_FOUND"
+      message: "Conversation not found"
+      description: "Conversation doesn't exist or doesn't belong to user"
+
+    - status: 500
+      code: "INTERNAL_SERVER_ERROR"
+      message: "Database error"
+      description: "Failed to retrieve conversation"
+
+typescript_signature: |
+  async getConversation(conversationId: string): Promise<Conversation>
+
+example_usage: |
+  const conversation = await apiClient.getConversation(
+    "660e8400-e29b-41d4-a716-446655440001"
+  );
+  console.log(conversation.title); // "Task Management Session"
+  console.log(conversation.messages?.length); // 10
+  console.log(conversation.messages?.[0].content); // "Add a task to buy groceries"
+```
+
+---
+### 4. createConversation
+
+Create a new conversation with optional title.
+
+```yaml
+method: createConversation
+http_method: POST
+endpoint: "/conversations"
+description: "Create a new conversation for the authenticated user"
+
+request:
+  type: "ConversationCreateRequest"
+  schema:
+    title:
+      type: "string"
+      required: false
+      max_length: 100
+      validation: "Cannot be empty or whitespace-only if provided"
+      description: "Optional conversation title (auto-generated if not provided)"
+
+response:
+  success:
+    status: 201
+    type: "ApiResponse<Conversation>"
+    schema:
+      success:
+        type: "boolean"
+        value: true
+      data:
+        type: "Conversation"
+        description: "Newly created conversation (without messages)"
+      message:
+        type: "string"
+        value: "Conversation created successfully"
+
+  errors:
+    - status: 401
+      code: "UNAUTHORIZED"
+      message: "Authentication required"
+      action: "Redirect to /signin"
+
+    - status: 422
+      code: "VALIDATION_ERROR"
+      message: "Invalid title"
+      description: "Title validation failed"
+
+    - status: 500
+      code: "INTERNAL_SERVER_ERROR"
+      message: "Database error"
+      description: "Failed to create conversation"
+
+typescript_signature: |
+  async createConversation(request?: ConversationCreateRequest): Promise<Conversation>
+
+example_usage: |
+  // With title
+  const conversation = await apiClient.createConversation({
+    title: "Task Management Session"
+  });
+  console.log(conversation.id); // "660e8400-e29b-41d4-a716-446655440001"
+  console.log(conversation.title); // "Task Management Session"
+
+  // Without title (auto-generated)
+  const conversation2 = await apiClient.createConversation();
+  console.log(conversation2.title); // null (will be set on first message)
+```
+
+---
+### 5. deleteConversation
+
+Delete a conversation and all its messages permanently.
+
+```yaml
+method: deleteConversation
+http_method: DELETE
+endpoint: "/conversations/{conversation_id}"
+description: "Permanently delete a conversation and all its messages (cascade delete)"
+
+request:
+  type: "path_parameters"
+  schema:
+    conversation_id:
+      type: "string"
+      required: true
+      format: "uuid"
+      description: "Conversation identifier"
+
+response:
+  success:
+    status: 200
+    type: "ApiResponse<{ id: string }>"
+    schema:
+      success:
+        type: "boolean"
+        value: true
+      data:
+        type: "object"
+        properties:
+          id:
+            type: "string"
+            format: "uuid"
+            description: "Deleted conversation ID"
+      message:
+        type: "string"
+        value: "Conversation deleted successfully"
+
+  errors:
+    - status: 401
+      code: "UNAUTHORIZED"
+      message: "Authentication required"
+      action: "Redirect to /signin"
+
+    - status: 404
+      code: "NOT_FOUND"
+      message: "Conversation not found"
+      description: "Conversation doesn't exist or doesn't belong to user"
+
+    - status: 500
+      code: "INTERNAL_SERVER_ERROR"
+      message: "Database error"
+      description: "Failed to delete conversation"
+
+typescript_signature: |
+  async deleteConversation(conversationId: string): Promise<void>
+
+example_usage: |
+  await apiClient.deleteConversation("660e8400-e29b-41d4-a716-446655440001");
+  console.log("Conversation deleted successfully");
+```
+
+---
+## Error Handling Specification
+
+### Error Response Format
+
+All error responses follow the standardized format:
+
+```yaml
+error_response:
+  success:
+    type: "boolean"
+    value: false
+  error:
+    type: "object"
+    properties:
+      code:
+        type: "string"
+        description: "Error code (e.g., UNAUTHORIZED, VALIDATION_ERROR)"
+      message:
+        type: "string"
+        description: "User-friendly error message"
+      details:
+        type: "any"
+        required: false
+        description: "Optional additional error details"
+```
+
+### Error Handling Strategy
+
+```yaml
+error_handling:
+  network_errors:
+    description: "Fetch failures, timeouts, connection errors"
+    action: "Display user-friendly message, preserve input, allow retry"
+    message: "Network error. Please check your connection and try again."
+
+  authentication_errors:
+    status: 401
+    description: "JWT token expired or invalid"
+    action: "Automatic redirect to /signin (handled by api-client.ts)"
+    message: "Your session has expired. Please sign in again."
+
+  validation_errors:
+    status: 422
+    description: "Invalid input data"
+    action: "Display validation error, highlight invalid field"
+    message: "Invalid input. Please check your message and try again."
+
+  not_found_errors:
+    status: 404
+    description: "Resource not found or unauthorized access"
+    action: "Display error, redirect to conversation list"
+    message: "Conversation not found. It may have been deleted."
+
+  server_errors:
+    status: 500
+    description: "Backend processing errors"
+    action: "Display error, preserve input, allow retry"
+    message: "Something went wrong. Please try again."
+
+  ai_processing_errors:
+    status: 500
+    description: "OpenAI API errors or agent failures"
+    action: "Display error, preserve input, allow retry"
+    message: "AI agent failed to process your message. Please try again."
+```
+
+### Retry Policy
+
+```yaml
+retry_policy:
+  enabled: true
+  max_retries: 3
+  retry_on_status: [500, 502, 503, 504]
+  no_retry_on_status: [400, 401, 403, 404, 422]
+  backoff_strategy: "exponential"
+  backoff_delays: [1000, 2000, 4000]  # milliseconds
+
+  implementation: |
+    async function sendMessageWithRetry(
+      request: ChatMessageRequest,
+      maxRetries = 3
+    ): Promise<ChatMessageResponse> {
+      let lastError: Error;
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          return await apiClient.sendMessage(request);
+        } catch (error) {
+          lastError = error as Error;
+
+          // Don't retry on client errors (4xx)
+          if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+            throw error;
+          }
+
+          // Exponential backoff
+          const delay = Math.pow(2, attempt) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+
+      throw lastError!;
+    }
+```
+
+---
+## Authentication Flow
+
+### JWT Cookie Authentication
+
+```yaml
+authentication:
+  type: "httpOnly_cookie"
+  cookie_name: "auth_token"
+  set_by: "Backend (Better Auth)"
+  sent_by: "Browser (automatic with credentials: 'include')"
+
+  flow:
+    - step: 1
+      action: "User signs in via Better Auth"
+      result: "Backend sets httpOnly cookie with JWT token"
+
+    - step: 2
+      action: "Frontend makes API request"
+      result: "Browser automatically includes cookie in request"
+
+    - step: 3
+      action: "Backend validates JWT token"
+      result: "Extracts user_id from token, enforces data isolation"
+
+    - step: 4
+      action: "Backend returns response"
+      result: "Data scoped to authenticated user"
+
+  expiration_handling:
+    - scenario: "Token expires during chat session"
+      detection: "Backend returns 401 Unauthorized"
+      action: "api-client.ts automatically redirects to /signin"
+      user_experience: "User sees login page, can sign in and resume"
+
+  security_notes:
+    - "httpOnly cookie prevents XSS attacks (JavaScript cannot access token)"
+    - "credentials: 'include' required for cross-origin requests"
+    - "Backend enforces user_id filtering on all queries"
+    - "Return 404 (not 403) for unauthorized access to prevent information leakage"
+```
+
+---
+## Implementation Checklist
+
+```yaml
+implementation_tasks:
+  - task: "Add chat types to frontend/lib/types.ts"
+    status: "pending"
+    files: ["frontend/lib/types.ts"]
+
+  - task: "Add chat methods to frontend/lib/api-client.ts"
+    status: "pending"
+    files: ["frontend/lib/api-client.ts"]
+    methods:
+      - sendMessage
+      - getConversations
+      - getConversation
+      - createConversation
+      - deleteConversation
+
+  - task: "Add error handling utilities"
+    status: "pending"
+    files: ["frontend/lib/api-client.ts"]
+    functions:
+      - handleChatError
+      - sendMessageWithRetry
+
+  - task: "Add unit tests for API client methods"
+    status: "pending"
+    files: ["frontend/lib/__tests__/api-client.test.ts"]
+    test_cases:
+      - "sendMessage - success"
+      - "sendMessage - validation error"
+      - "sendMessage - authentication error"
+      - "getConversations - success"
+      - "getConversation - not found"
+      - "deleteConversation - success"
+
+  - task: "Add integration tests"
+    status: "pending"
+    files: ["frontend/__tests__/integration/chat-api.test.ts"]
+    test_cases:
+      - "Full conversation flow (create, send, retrieve, delete)"
+      - "Error handling scenarios"
+      - "Authentication expiration handling"
+```
+
+---
+## Testing Scenarios
+
+### Unit Tests
+
+```yaml
+unit_tests:
+  - test: "sendMessage with valid input"
+    input:
+      content: "Add a task to buy groceries"
+    expected_output:
+      status: 200
+      response:
+        message: "I've added 'buy groceries' to your task list."
+        conversation_id: "660e8400-e29b-41d4-a716-446655440001"
+
+  - test: "sendMessage with empty content"
+    input:
+      content: "   "
+    expected_error:
+      status: 422
+      code: "VALIDATION_ERROR"
+      message: "Message content cannot be empty"
+
+  - test: "getConversations with limit"
+    input:
+      limit: 10
+    expected_output:
+      status: 200
+      response:
+        length: 10
+        sorted_by: "updated_at DESC"
+
+  - test: "getConversation with invalid ID"
+    input:
+      conversation_id: "invalid-uuid"
+    expected_error:
+      status: 404
+      code: "NOT_FOUND"
+
+  - test: "deleteConversation success"
+    input:
+      conversation_id: "660e8400-e29b-41d4-a716-446655440001"
+    expected_output:
+      status: 200
+      response:
+        id: "660e8400-e29b-41d4-a716-446655440001"
+```
+
+### Integration Tests
+
+```yaml
+integration_tests:
+  - test: "Complete conversation flow"
+    steps:
+      - action: "Create conversation"
+        method: "createConversation"
+        input: { title: "Test Session" }
+        verify: "Conversation created with ID"
+
+      - action: "Send first message"
+        method: "sendMessage"
+        input: { content: "Add a task", conversation_id: "{conversation_id}" }
+        verify: "AI responds with confirmation"
+
+      - action: "Retrieve conversation"
+        method: "getConversation"
+        input: { conversation_id: "{conversation_id}" }
+        verify: "Messages array contains 2 messages (user + assistant)"
+
+      - action: "Delete conversation"
+        method: "deleteConversation"
+        input: { conversation_id: "{conversation_id}" }
+        verify: "Conversation deleted successfully"
+
+      - action: "Verify deletion"
+        method: "getConversation"
+        input: { conversation_id: "{conversation_id}" }
+        verify: "Returns 404 NOT_FOUND"
+
+  - test: "Authentication expiration handling"
+    steps:
+      - action: "Expire JWT token (mock)"
+        method: "expireAuthToken"
+
+      - action: "Attempt to send message"
+        method: "sendMessage"
+        input: { content: "Test message" }
+        verify: "Returns 401, redirects to /signin"
+```
+
+---
+## Performance Requirements
+
+```yaml
+performance:
+  response_times:
+    sendMessage:
+      target: "< 2 seconds (p95)"
+      description: "Includes AI processing time"
+
+    getConversations:
+      target: "< 500ms (p95)"
+      description: "Database query only"
+
+    getConversation:
+      target: "< 1 second (p95)"
+      description: "Includes loading all messages"
+
+    createConversation:
+      target: "< 500ms (p95)"
+      description: "Database insert only"
+
+    deleteConversation:
+      target: "< 500ms (p95)"
+      description: "Cascade delete operation"
+
+  timeout:
+    default: 30000  # 30 seconds
+    sendMessage: 60000  # 60 seconds (AI processing can be slow)
+
+  rate_limiting:
+    description: "Backend enforces rate limits (not client-side)"
+    expected_limits:
+      sendMessage: "10 requests per minute per user"
+      other_endpoints: "60 requests per minute per user"
+```
+
+---
+## Security Considerations
+
+```yaml
+security:
+  authentication:
+    - "All endpoints require valid JWT token in httpOnly cookie"
+    - "Backend validates token on every request"
+    - "Expired tokens result in 401 Unauthorized"
+
+  authorization:
+    - "Backend enforces user_id filtering on all queries"
+    - "Users can only access their own conversations"
+    - "Return 404 (not 403) to prevent information leakage"
+
+  input_validation:
+    - "Frontend validates input before sending to backend"
+    - "Backend performs additional validation (defense in depth)"
+    - "Sanitize user input to prevent XSS attacks"
+
+  data_isolation:
+    - "Every conversation is scoped to user_id"
+    - "Backend filters all queries by current_user.id"
+    - "No cross-user data leakage possible"
+
+  error_handling:
+    - "Never expose sensitive information in error messages"
+    - "Log detailed errors server-side only"
+    - "Return user-friendly messages to client"
+```
+
+---
+**Document Status**: ✅ Complete
+**Ready for**: Implementation in frontend/lib/api-client.ts

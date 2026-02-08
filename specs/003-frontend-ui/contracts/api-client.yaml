@@ -1,0 +1,539 @@
+# API Client Contract
+
+**Feature**: 003-frontend-ui
+**Date**: 2026-02-07
+**Version**: 1.0.0
+
+## Overview
+
+This document defines the contract for the frontend API client that communicates with the FastAPI backend. The API client is responsible for:
+- Adding JWT authentication tokens to all requests
+- Handling common HTTP errors (401, 403, 404, 500)
+- Providing typed functions for each backend endpoint
+- Managing request/response serialization
+
+## Base Configuration
+
+### Base URL
+```typescript
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+```
+
+### Default Headers
+```typescript
+const defaultHeaders = {
+  'Content-Type': 'application/json',
+  'Accept': 'application/json'
+};
+```
+
+### Authentication Header
+```typescript
+// Added to all protected endpoints
+headers: {
+  'Authorization': `Bearer ${jwtToken}`
+}
+```
+
+## Authentication Endpoints
+
+### 1. Sign Up
+
+**Endpoint**: `POST /api/auth/signup`
+
+**Request**:
+```typescript
+interface SignUpRequest {
+  email: string;        // Valid email format
+  password: string;     // Min 8 characters
+}
+```
+
+**Success Response** (201 Created):
+```typescript
+interface SignUpResponse {
+  success: true;
+  data: {
+    user: User;         // Created user object
+    token: string;      // JWT token for immediate signin
+  };
+  message: string;      // "User created successfully"
+}
+```
+
+**Error Responses**:
+- 400 Bad Request: Invalid email format or weak password
+- 409 Conflict: Email already exists
+
+**Frontend Function**:
+```typescript
+async function signUp(data: SignUpRequest): Promise<SignUpResponse>
+```
+
+---
+
+### 2. Sign In
+
+**Endpoint**: `POST /api/auth/signin`
+
+**Request**:
+```typescript
+interface SignInRequest {
+  email: string;
+  password: string;
+}
+```
+
+**Success Response** (200 OK):
+```typescript
+interface SignInResponse {
+  success: true;
+  data: {
+    user: User;         // Authenticated user object
+    token: string;      // JWT token
+    expires_at: string; // ISO timestamp
+  };
+  message: string;      // "Signed in successfully"
+}
+```
+
+**Error Responses**:
+- 400 Bad Request: Missing email or password
+- 401 Unauthorized: Invalid credentials
+
+**Frontend Function**:
+```typescript
+async function signIn(data: SignInRequest): Promise<SignInResponse>
+```
+
+---
+
+### 3. Sign Out
+
+**Endpoint**: `POST /api/auth/signout`
+
+**Request**: No body required
+
+**Headers**: Requires `Authorization: Bearer {token}`
+
+**Success Response** (200 OK):
+```typescript
+interface SignOutResponse {
+  success: true;
+  data: null;
+  message: string;      // "Signed out successfully"
+}
+```
+
+**Error Responses**:
+- 401 Unauthorized: Invalid or expired token
+
+**Frontend Function**:
+```typescript
+async function signOut(): Promise<SignOutResponse>
+```
+
+---
+
+### 4. Get Current Session
+
+**Endpoint**: `GET /api/auth/session`
+
+**Request**: No body required
+
+**Headers**: Requires `Authorization: Bearer {token}`
+
+**Success Response** (200 OK):
+```typescript
+interface SessionResponse {
+  success: true;
+  data: {
+    user: User;
+    expires_at: string;
+  };
+  message: string;
+}
+```
+
+**Error Responses**:
+- 401 Unauthorized: Invalid or expired token
+
+**Frontend Function**:
+```typescript
+async function getSession(): Promise<SessionResponse>
+```
+
+---
+
+## Task Management Endpoints
+
+### 5. List Tasks
+
+**Endpoint**: `GET /api/tasks`
+
+**Request**: No body required
+
+**Headers**: Requires `Authorization: Bearer {token}`
+
+**Query Parameters**: None (backend automatically filters by authenticated user)
+
+**Success Response** (200 OK):
+```typescript
+interface ListTasksResponse {
+  success: true;
+  data: Task[];         // Array of tasks belonging to authenticated user
+  message: string;      // "Tasks retrieved successfully"
+}
+```
+
+**Error Responses**:
+- 401 Unauthorized: Invalid or expired token
+
+**Frontend Function**:
+```typescript
+async function getTasks(): Promise<Task[]>
+```
+
+---
+
+### 6. Get Single Task
+
+**Endpoint**: `GET /api/tasks/{id}`
+
+**Request**: No body required
+
+**Headers**: Requires `Authorization: Bearer {token}`
+
+**Path Parameters**:
+- `id`: UUID of the task
+
+**Success Response** (200 OK):
+```typescript
+interface GetTaskResponse {
+  success: true;
+  data: Task;           // Single task object
+  message: string;      // "Task retrieved successfully"
+}
+```
+
+**Error Responses**:
+- 401 Unauthorized: Invalid or expired token
+- 403 Forbidden: Task belongs to another user
+- 404 Not Found: Task does not exist
+
+**Frontend Function**:
+```typescript
+async function getTask(id: string): Promise<Task>
+```
+
+---
+
+### 7. Create Task
+
+**Endpoint**: `POST /api/tasks`
+
+**Request**:
+```typescript
+interface CreateTaskRequest {
+  title: string;        // Required, 1-200 characters
+  description: string;  // Optional, 0-1000 characters
+}
+```
+
+**Headers**: Requires `Authorization: Bearer {token}`
+
+**Success Response** (201 Created):
+```typescript
+interface CreateTaskResponse {
+  success: true;
+  data: Task;           // Newly created task (user_id auto-assigned)
+  message: string;      // "Task created successfully"
+}
+```
+
+**Error Responses**:
+- 400 Bad Request: Invalid title (empty or too long)
+- 401 Unauthorized: Invalid or expired token
+
+**Frontend Function**:
+```typescript
+async function createTask(data: CreateTaskRequest): Promise<Task>
+```
+
+---
+
+### 8. Update Task
+
+**Endpoint**: `PUT /api/tasks/{id}`
+
+**Request**:
+```typescript
+interface UpdateTaskRequest {
+  title?: string;        // Optional, 1-200 characters
+  description?: string;  // Optional, 0-1000 characters
+  completed?: boolean;   // Optional
+}
+```
+
+**Headers**: Requires `Authorization: Bearer {token}`
+
+**Path Parameters**:
+- `id`: UUID of the task
+
+**Success Response** (200 OK):
+```typescript
+interface UpdateTaskResponse {
+  success: true;
+  data: Task;           // Updated task object
+  message: string;      // "Task updated successfully"
+}
+```
+
+**Error Responses**:
+- 400 Bad Request: Invalid field values
+- 401 Unauthorized: Invalid or expired token
+- 403 Forbidden: Task belongs to another user
+- 404 Not Found: Task does not exist
+
+**Frontend Function**:
+```typescript
+async function updateTask(id: string, data: UpdateTaskRequest): Promise<Task>
+```
+
+---
+
+### 9. Delete Task
+
+**Endpoint**: `DELETE /api/tasks/{id}`
+
+**Request**: No body required
+
+**Headers**: Requires `Authorization: Bearer {token}`
+
+**Path Parameters**:
+- `id`: UUID of the task
+
+**Success Response** (200 OK):
+```typescript
+interface DeleteTaskResponse {
+  success: true;
+  data: null;
+  message: string;      // "Task deleted successfully"
+}
+```
+
+**Error Responses**:
+- 401 Unauthorized: Invalid or expired token
+- 403 Forbidden: Task belongs to another user
+- 404 Not Found: Task does not exist
+
+**Frontend Function**:
+```typescript
+async function deleteTask(id: string): Promise<void>
+```
+
+---
+
+## Error Handling Contract
+
+### Global Error Handler
+
+The API client must implement a global error handler that:
+
+1. **Intercepts all HTTP errors**
+2. **Parses error responses** into consistent format
+3. **Handles specific status codes**:
+   - 401: Clear session, redirect to /signin
+   - 403: Show "Access denied" message
+   - 404: Show "Not found" message
+   - 500: Show "Server error" message
+4. **Provides user-friendly error messages**
+
+### Error Response Format
+
+All errors follow this structure:
+```typescript
+interface ApiError {
+  success: false;
+  error: {
+    code: string;       // Error code
+    message: string;    // Human-readable message
+  };
+}
+```
+
+### Error Codes
+
+| Code | HTTP Status | Meaning | Frontend Action |
+|------|-------------|---------|-----------------|
+| UNAUTHORIZED | 401 | Invalid/expired token | Clear session, redirect to /signin |
+| FORBIDDEN | 403 | Valid token, insufficient permissions | Show error message |
+| NOT_FOUND | 404 | Resource not found | Show "Not found" message |
+| VALIDATION_ERROR | 400 | Invalid input data | Show field-specific errors |
+| CONFLICT | 409 | Resource already exists | Show "Already exists" message |
+| INTERNAL_ERROR | 500 | Server error | Show "Something went wrong" message |
+
+---
+
+## Request Interceptor
+
+The API client must implement a request interceptor that:
+
+1. **Retrieves JWT token** from Better Auth session
+2. **Adds Authorization header** to all protected endpoints
+3. **Handles token expiration** before sending request
+4. **Refreshes token** if expired (if Better Auth supports it)
+
+**Implementation**:
+```typescript
+async function addAuthHeader(config: RequestConfig): Promise<RequestConfig> {
+  const session = await getSession();
+
+  if (!session || !session.token) {
+    throw new Error('No authentication token available');
+  }
+
+  // Check if token is expired
+  if (new Date(session.expires_at) < new Date()) {
+    // Token expired - redirect to signin
+    window.location.href = '/signin';
+    throw new Error('Session expired');
+  }
+
+  config.headers['Authorization'] = `Bearer ${session.token}`;
+  return config;
+}
+```
+
+---
+
+## Response Interceptor
+
+The API client must implement a response interceptor that:
+
+1. **Parses successful responses** and extracts `data` field
+2. **Handles error responses** and throws typed errors
+3. **Logs errors** for debugging (development only)
+
+**Implementation**:
+```typescript
+async function handleResponse<T>(response: Response): Promise<T> {
+  const json = await response.json();
+
+  if (response.ok && json.success) {
+    return json.data;
+  }
+
+  // Handle error response
+  if (!json.success && json.error) {
+    const error = new ApiError(
+      json.error.code,
+      json.error.message,
+      response.status
+    );
+
+    // Special handling for 401
+    if (response.status === 401) {
+      // Clear session and redirect
+      await clearSession();
+      window.location.href = '/signin';
+    }
+
+    throw error;
+  }
+
+  // Unexpected response format
+  throw new Error('Unexpected API response format');
+}
+```
+
+---
+
+## Type Safety
+
+All API client functions must:
+- Accept typed request parameters
+- Return typed responses
+- Throw typed errors
+- Use TypeScript generics where appropriate
+
+**Example**:
+```typescript
+class ApiClient {
+  async get<T>(endpoint: string): Promise<T> {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'GET',
+      headers: await this.getHeaders()
+    });
+    return this.handleResponse<T>(response);
+  }
+
+  async post<T, R>(endpoint: string, data: T): Promise<R> {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: await this.getHeaders(),
+      body: JSON.stringify(data)
+    });
+    return this.handleResponse<R>(response);
+  }
+}
+```
+
+---
+
+## Testing Contract
+
+The API client must be testable with:
+- **Mock responses** for unit tests
+- **Request/response logging** in development
+- **Error simulation** for error handling tests
+
+**Mock Example**:
+```typescript
+// In tests
+jest.mock('./api-client');
+mockApiClient.getTasks.mockResolvedValue([mockTask1, mockTask2]);
+```
+
+---
+
+## Usage Example
+
+```typescript
+import { apiClient } from '@/lib/api-client';
+
+// In a component or hook
+async function loadTasks() {
+  try {
+    const tasks = await apiClient.getTasks();
+    setTasks(tasks);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      setError(error.message);
+    }
+  }
+}
+
+async function handleCreateTask(data: TaskFormData) {
+  try {
+    const newTask = await apiClient.createTask(data);
+    setTasks([...tasks, newTask]);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'VALIDATION_ERROR') {
+      setFormErrors(error.details);
+    }
+  }
+}
+```
+
+---
+
+## Compliance
+
+This API client contract ensures:
+- ✅ All requests include JWT authentication
+- ✅ Consistent error handling across the application
+- ✅ Type safety with TypeScript
+- ✅ Separation of concerns (API logic separate from UI)
+- ✅ Testability with mocking support
+- ✅ Alignment with backend API contracts from Spec 1 and Spec 2
