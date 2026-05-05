@@ -1,108 +1,142 @@
-// TaskItem component with task display, edit, completion toggle, and delete
-// Implements T049, T054, T055, T070, T071, T072, T073, T077, T078, T080, T081, T082, T084, T085 from tasks.md
+// TaskItem - glass card with completion toggle, priority badge, tags,
+// due-date pill, edit & delete.
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Task, TaskFormData } from '@/lib/types';
 import { TaskForm } from './TaskForm';
 import { DeleteConfirmation } from './DeleteConfirmation';
-import { Button } from '@/components/ui/Button';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
+import { Modal } from '@/components/ui/Modal';
+import { parseTags } from '@/lib/tags';
 
 interface TaskItemProps {
   task: Task;
-  onUpdate: (id: string, data: Partial<TaskFormData> & { completed?: boolean }) => Promise<void>;
+  tagSuggestions?: string[];
+  onUpdate: (
+    id: string,
+    data: Partial<TaskFormData> & { completed?: boolean }
+  ) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
-/**
- * TaskItem component displays a single task with edit, completion toggle, and delete
- * T054: Display task title, description, and completion status
- * T055: Add visual distinction for completed vs incomplete tasks
- * T070: Add edit button
- * T071: Add completion toggle checkbox
- * T072: Implement edit mode state
- * T073: Show TaskForm in edit mode when edit button clicked
- * T077: Implement toggle completion handler
- * T078: Call updateTask API with completed status on toggle
- * T080: Update task visual state after completion toggle
- * T081: Display error message if update fails
- * T082: Add loading state during task update
- * T084: Add delete button
- * T085: Implement delete button click handler to show confirmation
- */
-export function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
-  // T072: Edit mode state
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [isTogglingCompletion, setIsTogglingCompletion] = useState(false);
+const PRIORITY_LABEL: Record<Task['priority'], string> = {
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
+
+const PRIORITY_CLASS: Record<Task['priority'], string> = {
+  high: 'priority-high',
+  medium: 'priority-medium',
+  low: 'priority-low',
+};
+
+const PRIORITY_DOT: Record<Task['priority'], string> = {
+  high: 'bg-rose-400',
+  medium: 'bg-amber-400',
+  low: 'bg-emerald-400',
+};
+
+const rtf =
+  typeof Intl !== 'undefined' && Intl.RelativeTimeFormat
+    ? new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+    : null;
+
+interface DueMeta {
+  label: string;
+  tone: 'overdue' | 'soon' | 'normal';
+  absolute: string;
+}
+
+function describeDue(iso: string | null): DueMeta | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const diffMs = date.getTime() - Date.now();
+  const diffMin = Math.round(diffMs / 60_000);
+  const diffH = Math.round(diffMs / 3_600_000);
+  const diffD = Math.round(diffMs / 86_400_000);
+
+  let label: string;
+  if (rtf) {
+    if (Math.abs(diffMin) < 60) label = rtf.format(diffMin, 'minute');
+    else if (Math.abs(diffH) < 24) label = rtf.format(diffH, 'hour');
+    else label = rtf.format(diffD, 'day');
+  } else {
+    label = date.toLocaleString();
+  }
+
+  let tone: DueMeta['tone'] = 'normal';
+  if (diffMs < 0) tone = 'overdue';
+  else if (diffH <= 24) tone = 'soon';
+
+  return {
+    label,
+    tone,
+    absolute: date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+  };
+}
+
+export function TaskItem({
+  task,
+  tagSuggestions = [],
+  onUpdate,
+  onDelete,
+}: TaskItemProps) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // T085: Delete confirmation state
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
 
-  /**
-   * T077, T078: Handle completion toggle
-   */
-  const handleToggleCompletion = async () => {
-    setIsTogglingCompletion(true);
+  const tagList = useMemo(() => parseTags(task.tags), [task.tags]);
+  const due = useMemo(() => describeDue(task.due_date), [task.due_date]);
+
+  const handleToggle = async () => {
+    setIsToggling(true);
     setError(null);
-
     try {
-      // T078: Call updateTask API with completed status
       await onUpdate(task.id, { completed: !task.completed });
     } catch (err) {
-      // T081: Display error message if update fails
-      setError('Failed to update task status. Please try again.');
+      setError(
+        err instanceof Error ? err.message : 'Failed to update task status.'
+      );
     } finally {
-      setIsTogglingCompletion(false);
+      setIsToggling(false);
     }
   };
 
-  /**
-   * Handle task edit submission
-   */
   const handleEditSubmit = async (data: TaskFormData) => {
     await onUpdate(task.id, data);
-    setIsEditMode(false);
+    setIsEditOpen(false);
   };
 
-  /**
-   * T085: Handle delete confirmation
-   */
   const handleDelete = async () => {
     await onDelete(task.id);
   };
 
-  // T073: Show TaskForm in edit mode
-  if (isEditMode) {
-    return (
-      <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Task</h3>
-        <TaskForm
-          onSubmit={handleEditSubmit}
-          onCancel={() => setIsEditMode(false)}
-          initialData={{
-            title: task.title,
-            description: task.description,
-          }}
-          isEditMode={true}
-        />
-      </div>
-    );
-  }
+  const dueClasses =
+    due?.tone === 'overdue'
+      ? 'border-rose-400/40 bg-rose-500/15 text-rose-200 shadow-[0_0_14px_-2px_rgba(244,63,94,0.55)]'
+      : due?.tone === 'soon'
+        ? 'border-amber-400/40 bg-amber-500/15 text-amber-200 shadow-[0_0_14px_-2px_rgba(245,158,11,0.45)]'
+        : 'border-white/15 bg-white/[0.06] text-slate-200';
 
-  // T055, T080: Visual distinction for completed vs incomplete tasks
   return (
     <>
       <div
-        className={`
-          bg-white rounded-lg border p-4 shadow-sm transition-all
-          ${task.completed ? 'border-green-200 bg-green-50' : 'border-gray-200'}
-          hover:shadow-md
-        `}
+        className={`group relative animate-slideUp glass overflow-hidden p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/30 hover:shadow-[0_18px_50px_-20px_rgba(139,92,246,0.5)] sm:p-5 ${
+          task.completed ? 'opacity-80' : ''
+        }`}
       >
-        {/* T081: Error message */}
         {error && (
           <div className="mb-3">
             <ErrorMessage
@@ -113,135 +147,205 @@ export function TaskItem({ task, onUpdate, onDelete }: TaskItemProps) {
           </div>
         )}
 
-        <div className="flex items-start gap-3">
-          {/* T071: Completion toggle checkbox */}
+        <div className="flex items-start gap-3 sm:gap-4">
+          {/* Completion toggle */}
           <button
-            onClick={handleToggleCompletion}
-            disabled={isTogglingCompletion}
-            className="flex-shrink-0 mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
-            aria-label={task.completed ? 'Mark as incomplete' : 'Mark as complete'}
+            type="button"
+            onClick={handleToggle}
+            disabled={isToggling}
+            aria-label={
+              task.completed ? 'Mark as incomplete' : 'Mark as complete'
+            }
+            aria-pressed={task.completed}
+            className="glass-check mt-0.5 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60"
+            data-checked={task.completed}
           >
-            {/* T082: Loading state during toggle */}
-            {isTogglingCompletion ? (
-              <div className="h-5 w-5 rounded-full border-2 border-gray-300 animate-pulse"></div>
+            {isToggling ? (
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
             ) : task.completed ? (
-              <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center">
-                <svg
-                  className="h-3 w-3 text-white"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path d="M5 13l4 4L19 7"></path>
-                </svg>
-              </div>
-            ) : (
-              <div className="h-5 w-5 rounded-full border-2 border-gray-300 hover:border-gray-400"></div>
-            )}
+              <svg
+                className="h-3.5 w-3.5 text-white"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            ) : null}
           </button>
 
-          {/* Task content */}
-          <div className="flex-1 min-w-0">
-            {/* T054: Display task title */}
-            <h3
-              className={`
-                text-base font-medium mb-1
-                ${task.completed ? 'text-gray-500 line-through' : 'text-gray-900'}
-              `}
-            >
-              {task.title}
-            </h3>
+          {/* Body */}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-start gap-2">
+              <h3
+                className={`text-base font-semibold leading-snug sm:text-lg ${
+                  task.completed
+                    ? 'text-slate-400 line-through decoration-slate-500/70'
+                    : 'text-white'
+                }`}
+              >
+                {task.title}
+              </h3>
+              <span
+                className={PRIORITY_CLASS[task.priority]}
+                title={`${PRIORITY_LABEL[task.priority]} priority`}
+              >
+                <span
+                  className={`mr-1 h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[task.priority]}`}
+                />
+                {PRIORITY_LABEL[task.priority]}
+              </span>
+            </div>
 
-            {/* T054: Display task description */}
             {task.description && (
               <p
-                className={`
-                  text-sm mb-2
-                  ${task.completed ? 'text-gray-400' : 'text-gray-600'}
-                `}
+                className={`mt-1 text-sm leading-relaxed ${
+                  task.completed ? 'text-slate-400/80' : 'text-slate-300'
+                } ${descExpanded ? '' : 'line-clamp-2'}`}
               >
                 {task.description}
               </p>
             )}
 
-            {/* Task metadata */}
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span>
-                Created: {new Date(task.created_at).toLocaleDateString()}
-              </span>
-              {task.updated_at !== task.created_at && (
-                <span>
-                  Updated: {new Date(task.updated_at).toLocaleDateString()}
+            {task.description && task.description.length > 120 && (
+              <button
+                type="button"
+                onClick={() => setDescExpanded((v) => !v)}
+                className="mt-1 text-xs font-medium text-brand-300 transition-colors hover:text-brand-200"
+              >
+                {descExpanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              {due && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-medium ${dueClasses}`}
+                  title={due.absolute}
+                >
+                  <svg
+                    className="h-3.5 w-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18" />
+                  </svg>
+                  {due.tone === 'overdue' ? 'Overdue' : 'Due'} {due.label}
                 </span>
               )}
+
+              {tagList.map((tag) => (
+                <span key={tag} className="glass-chip">
+                  <svg
+                    className="h-3 w-3 text-slate-300"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+                    <path d="M7 7h.01" />
+                  </svg>
+                  {tag}
+                </span>
+              ))}
+
+              <span className="ml-auto text-[11px] text-slate-400/80">
+                {new Date(task.created_at).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </span>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex-shrink-0 flex items-center gap-2">
-            {/* T054: Completion status badge */}
-            <span
-              className={`
-                inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                ${
-                  task.completed
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
-                }
-              `}
-            >
-              {task.completed ? 'Completed' : 'Pending'}
-            </span>
-
-            {/* T070: Edit button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsEditMode(true)}
-              disabled={isTogglingCompletion}
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsEditOpen(true)}
+              disabled={isToggling}
               aria-label="Edit task"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-transparent text-slate-300 transition-all hover:border-white/15 hover:bg-white/[0.08] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60"
             >
               <svg
                 className="h-4 w-4"
+                viewBox="0 0 24 24"
                 fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+                aria-hidden="true"
               >
-                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5" />
+                <path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
-            </Button>
-
-            {/* T084: Delete button */}
-            <Button
-              variant="ghost"
-              size="sm"
+            </button>
+            <button
+              type="button"
               onClick={() => setShowDeleteConfirmation(true)}
-              disabled={isTogglingCompletion}
+              disabled={isToggling}
               aria-label="Delete task"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-transparent text-rose-300 transition-all hover:border-rose-400/30 hover:bg-rose-500/15 hover:text-rose-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/60"
             >
               <svg
-                className="h-4 w-4 text-red-600"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
                 fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+                aria-hidden="true"
               >
-                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                <path d="M3 6h18" />
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2" />
               </svg>
-            </Button>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* T085: Delete confirmation modal */}
+      {/* Edit modal */}
+      <Modal
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        title="Edit task"
+        description="Tweak the details and save."
+        size="lg"
+      >
+        <TaskForm
+          isEditMode
+          initialData={{
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            tags: task.tags,
+            due_date: task.due_date,
+          }}
+          tagSuggestions={tagSuggestions}
+          onSubmit={handleEditSubmit}
+          onCancel={() => setIsEditOpen(false)}
+        />
+      </Modal>
+
+      {/* Delete confirmation */}
       {showDeleteConfirmation && (
         <DeleteConfirmation
           taskTitle={task.title}

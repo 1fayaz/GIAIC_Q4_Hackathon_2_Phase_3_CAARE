@@ -28,6 +28,9 @@ class Task(SQLModel, table=True):
         title: Task title/summary (required, max 200 chars)
         description: Detailed task description (optional, max 1000 chars)
         completed: Task completion status (default: False)
+        priority: Task priority level - "low", "medium", or "high" (default: "medium", indexed)
+        tags: Comma-separated lowercase labels, e.g. "work,urgent" (optional, max 500 chars, indexed)
+        due_date: Optional due date for the task (UTC, indexed)
         created_at: Timestamp when task was created (UTC, auto-generated)
         updated_at: Timestamp when task was last modified (UTC, auto-updated)
         user: Relationship to User model (many-to-one)
@@ -64,6 +67,26 @@ class Task(SQLModel, table=True):
         default=False,
         nullable=False,
         description="Task completion status"
+    )
+
+    priority: str = Field(
+        default="medium",
+        nullable=False,
+        index=True,
+        description="Task priority level: 'low', 'medium', or 'high'"
+    )
+
+    tags: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        index=True,
+        description="Comma-separated lowercase labels (e.g. 'work,urgent')"
+    )
+
+    due_date: Optional[datetime] = Field(
+        default=None,
+        index=True,
+        description="Optional due date for the task (UTC)"
     )
 
     created_at: datetime = Field(

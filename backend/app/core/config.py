@@ -35,6 +35,12 @@ class Settings(BaseSettings):
         description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
     )
 
+    # Deployment environment: "development" | "production"
+    ENVIRONMENT: str = Field(
+        default="development",
+        description='Deployment environment ("development" or "production"). Controls cookie Secure/SameSite.'
+    )
+
     # JWT Authentication Configuration
     JWT_SECRET: str = Field(
         ...,

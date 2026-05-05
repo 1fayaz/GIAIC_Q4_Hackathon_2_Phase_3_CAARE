@@ -1,5 +1,4 @@
-// TaskList component
-// Implements T048, T053, T056 from tasks.md
+// TaskList - empty state, skeletons, and renders TaskItem rows.
 
 'use client';
 
@@ -10,59 +9,103 @@ import { TaskItem } from './TaskItem';
 interface TaskListProps {
   tasks: Task[];
   isLoading: boolean;
-  onUpdate: (id: string, data: Partial<TaskFormData> & { completed?: boolean }) => Promise<void>;
+  /** True when filters changed but we already have tasks rendered. */
+  isFetching?: boolean;
+  /** Used by edit form to power tag autocomplete. */
+  tagSuggestions?: string[];
+  /** Whether any filters are active (changes the empty-state copy). */
+  hasActiveFilters?: boolean;
+  onUpdate: (
+    id: string,
+    data: Partial<TaskFormData> & { completed?: boolean }
+  ) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onClearFilters?: () => void;
 }
 
-/**
- * TaskList component displays a list of tasks
- * T053: Implement empty state message when no tasks exist
- * T056: Implement responsive layout for task list
- */
-export function TaskList({ tasks, isLoading, onUpdate, onDelete }: TaskListProps) {
-  // T053: Empty state when no tasks exist
-  if (!isLoading && tasks.length === 0) {
+export function TaskList({
+  tasks,
+  isLoading,
+  isFetching,
+  tagSuggestions,
+  hasActiveFilters,
+  onUpdate,
+  onDelete,
+  onClearFilters,
+}: TaskListProps) {
+  if (isLoading) {
     return (
-      <div className="text-center py-12">
-        <svg
-          className="mx-auto h-12 w-12 text-gray-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-          />
-        </svg>
-        <h3 className="mt-2 text-sm font-medium text-gray-900">No tasks</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          Get started by creating a new task.
-        </p>
+      <div className="grid grid-cols-1 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="glass animate-pulse p-5"
+            aria-hidden="true"
+          >
+            <div className="flex gap-4">
+              <div className="h-6 w-6 rounded-md skeleton" />
+              <div className="flex-1 space-y-3">
+                <div className="h-4 w-1/2 rounded skeleton" />
+                <div className="h-3 w-3/4 rounded skeleton" />
+                <div className="flex gap-2">
+                  <div className="h-5 w-16 rounded-full skeleton" />
+                  <div className="h-5 w-20 rounded-full skeleton" />
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
-  // T056: Responsive layout for task list
-  // Mobile (320px): Single column with full width
-  // Tablet (768px): Single column with padding
-  // Desktop (1024px+): Single column with max width
-  return (
-    <div className="space-y-4">
-      {/* Task count */}
-      <div className="text-sm text-gray-600">
-        {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
-      </div>
+  if (tasks.length === 0) {
+    return (
+      <div className="glass animate-fadeIn flex flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-white/5 shadow-glass">
+          <span className="text-3xl" aria-hidden="true">
+            ✨
+          </span>
+        </div>
+        <h3 className="mt-4 text-lg font-semibold text-white">
+          {hasActiveFilters ? 'No tasks match your filters' : 'Your task list is empty'}
+        </h3>
+        <p className="mt-2 max-w-sm text-sm text-slate-300/80">
+          {hasActiveFilters
+            ? 'Try clearing the search or filter to see more.'
+            : 'Capture your next move. Press “New Task” to add one.'}
+        </p>
 
-      {/* Task list - responsive grid */}
+        {hasActiveFilters && onClearFilters && (
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="glass-btn mt-5 px-4 py-2 text-xs"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {isFetching && (
+        <div
+          className="pointer-events-none absolute -top-1 right-0 flex items-center gap-2 text-[11px] text-slate-300/80"
+          aria-live="polite"
+        >
+          <span className="h-1.5 w-1.5 animate-spinSlow rounded-full bg-brand-400" />
+          Updating...
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4">
         {tasks.map((task) => (
           <TaskItem
             key={task.id}
             task={task}
+            tagSuggestions={tagSuggestions}
             onUpdate={onUpdate}
             onDelete={onDelete}
           />

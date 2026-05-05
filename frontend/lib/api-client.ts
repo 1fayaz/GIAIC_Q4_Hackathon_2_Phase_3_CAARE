@@ -13,15 +13,10 @@ import {
   SignInFormData,
   SignUpFormData,
   TaskFormData,
+  TaskFilters,
   SignInResponse,
   SignUpResponse,
   SessionResponse,
-  ChatMessageRequest,
-  ChatMessageResponse,
-  Conversation,
-  ConversationCreateRequest,
-  ChatErrorCode,
-  ChatError,
 } from './types';
 
 // ============================================================================
@@ -117,6 +112,38 @@ async function handleResponse<T>(response: Response): Promise<T> {
     'Unexpected server response format',
     response.status
   );
+}
+
+// ============================================================================
+// Query string helpers
+// ============================================================================
+
+/**
+ * Build a `?key=value` query string from a TaskFilters object,
+ * skipping empty / undefined values and the implicit `status=all`.
+ */
+function buildTaskQuery(filters: TaskFilters): string {
+  const params = new URLSearchParams();
+
+  if (filters.search && filters.search.trim()) {
+    params.set('search', filters.search.trim());
+  }
+  if (filters.status && filters.status !== 'all') {
+    params.set('status', filters.status);
+  }
+  if (filters.priority) {
+    params.set('priority', filters.priority);
+  }
+  if (filters.tag && filters.tag.trim()) {
+    params.set('tag', filters.tag.trim());
+  }
+  if (filters.due_before) params.set('due_before', filters.due_before);
+  if (filters.due_after) params.set('due_after', filters.due_after);
+  if (filters.sort_by) params.set('sort_by', filters.sort_by);
+  if (filters.order) params.set('order', filters.order);
+
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
 }
 
 // ============================================================================
@@ -271,11 +298,14 @@ class ApiClient {
   // ==========================================================================
 
   /**
-   * Get all tasks for the authenticated user
-   * SECURITY: Cookie is automatically sent with request
+   * Get all tasks for the authenticated user.
+   * Optional `filters` are forwarded as query params to the backend
+   * (search, status, priority, tag, due_before, due_after, sort_by, order).
+   * SECURITY: Cookie is automatically sent with request.
    */
-  async getTasks(): Promise<Task[]> {
-    return this.get<Task[]>('/api/tasks');
+  async getTasks(filters?: TaskFilters): Promise<Task[]> {
+    const qs = filters ? buildTaskQuery(filters) : '';
+    return this.get<Task[]>(`/api/tasks${qs}`);
   }
 
   /**
@@ -314,164 +344,6 @@ class ApiClient {
    */
   async deleteTask(id: string): Promise<void> {
     return this.delete<void>(`/api/tasks/${id}`);
-  }
-
-  // ==========================================================================
-  // Chat Endpoints (Spec 5: ChatKit Frontend)
-  // ==========================================================================
-
-  /**
-   * Send a message to the AI agent
-   * Creates new conversation if conversation_id not provided
-   * SECURITY: Cookie is automatically sent with request
-   *
-   * @param request - Message content and optional conversation_id
-   * @returns AI agent's response with tool calls and conversation_id
-   * @throws ApiError with ChatErrorCode on failure
-   */
-  async sendMessage(request: ChatMessageRequest): Promise<ChatMessageResponse> {
-    try {
-      return await this.post<ChatMessageRequest, ChatMessageResponse>(
-        '/api/chat/message',
-        request
-      );
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw this.mapToChatError(error, ChatErrorCode.MESSAGE_SEND_FAILED);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Get all conversations for the authenticated user
-   * Returns conversations without messages (use getConversation for full history)
-   * SECURITY: Cookie is automatically sent with request
-   *
-   * @param limit - Maximum number of conversations to return (default: 50)
-   * @returns Array of conversations sorted by most recent activity
-   * @throws ApiError with ChatErrorCode on failure
-   */
-  async getConversations(limit: number = 50): Promise<Conversation[]> {
-    try {
-      const endpoint = `/api/chat/conversations?limit=${limit}`;
-      return await this.get<Conversation[]>(endpoint);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw this.mapToChatError(error, ChatErrorCode.CONVERSATION_LOAD_FAILED);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Get a single conversation with full message history
-   * SECURITY: Cookie is automatically sent with request
-   *
-   * @param conversationId - UUID of the conversation
-   * @returns Conversation with messages array populated
-   * @throws ApiError with ChatErrorCode.CONVERSATION_NOT_FOUND if not found
-   */
-  async getConversation(conversationId: string): Promise<Conversation> {
-    try {
-      return await this.get<Conversation>(`/api/chat/conversations/${conversationId}`);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 404) {
-          throw this.mapToChatError(error, ChatErrorCode.CONVERSATION_NOT_FOUND);
-        }
-        throw this.mapToChatError(error, ChatErrorCode.CONVERSATION_LOAD_FAILED);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Create a new conversation
-   * SECURITY: Cookie is automatically sent with request
-   *
-   * @param request - Optional conversation title
-   * @returns Newly created conversation (without messages)
-   * @throws ApiError with ChatErrorCode on failure
-   */
-  async createConversation(request?: ConversationCreateRequest): Promise<Conversation> {
-    try {
-      return await this.post<ConversationCreateRequest, Conversation>(
-        '/api/chat/conversations',
-        request || {}
-      );
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw this.mapToChatError(error, ChatErrorCode.CONVERSATION_LOAD_FAILED);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Delete a conversation and all its messages permanently
-   * SECURITY: Cookie is automatically sent with request
-   *
-   * @param conversationId - UUID of the conversation to delete
-   * @throws ApiError with ChatErrorCode on failure
-   */
-  async deleteConversation(conversationId: string): Promise<void> {
-    try {
-      await this.delete<void>(`/api/chat/conversations/${conversationId}`);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 404) {
-          throw this.mapToChatError(error, ChatErrorCode.CONVERSATION_NOT_FOUND);
-        }
-        throw this.mapToChatError(error, ChatErrorCode.CONVERSATION_DELETE_FAILED);
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Map ApiError to ChatError with appropriate error code
-   * Provides user-friendly error messages for chat-specific errors
-   *
-   * @param error - Original ApiError from backend
-   * @param defaultCode - Default ChatErrorCode if mapping fails
-   * @returns ChatError with user-friendly message
-   */
-  private mapToChatError(error: ApiError, defaultCode: ChatErrorCode): ChatError {
-    let code = defaultCode;
-    let message = error.message;
-
-    // Map HTTP status codes to ChatErrorCode
-    switch (error.status) {
-      case 401:
-        code = ChatErrorCode.UNAUTHORIZED;
-        message = 'Your session has expired. Please sign in again.';
-        break;
-      case 404:
-        code = ChatErrorCode.CONVERSATION_NOT_FOUND;
-        message = 'Conversation not found. It may have been deleted.';
-        break;
-      case 422:
-        code = ChatErrorCode.INVALID_INPUT;
-        message = error.message || 'Invalid input. Please check your message and try again.';
-        break;
-      case 500:
-        code = ChatErrorCode.AI_PROCESSING_ERROR;
-        message = 'AI agent failed to process your message. Please try again.';
-        break;
-      default:
-        // Network errors or other issues
-        if (error.code === 'PARSE_ERROR' || !navigator.onLine) {
-          code = ChatErrorCode.NETWORK_ERROR;
-          message = 'Network error. Please check your connection and try again.';
-        }
-    }
-
-    return {
-      code,
-      message,
-      details: error
-    };
   }
 }
 

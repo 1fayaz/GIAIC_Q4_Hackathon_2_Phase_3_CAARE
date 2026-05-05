@@ -6,9 +6,46 @@ providing strict validation, type checking, and serialization for all task opera
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+
+def _normalize_tags(value: Optional[str]) -> Optional[str]:
+    """
+    Normalize a comma-separated tags string.
+
+    Splits on ``,``, strips and lowercases each label, drops empties, and
+    rejects any label that contains internal whitespace (e.g. "two words").
+    Returns ``None`` when the input is ``None`` or normalizes to an empty list.
+
+    Args:
+        value: Raw tags string (or None)
+
+    Returns:
+        Normalized comma-separated tags string, or None
+
+    Raises:
+        ValueError: If any individual label contains whitespace inside it
+    """
+    if value is None:
+        return None
+
+    labels = []
+    for raw in value.split(","):
+        label = raw.strip().lower()
+        if not label:
+            continue
+        if any(ch.isspace() for ch in label):
+            raise ValueError(
+                f"Tag '{label}' must not contain whitespace; "
+                "use commas to separate multiple tags"
+            )
+        labels.append(label)
+
+    if not labels:
+        return None
+    return ",".join(labels)
 
 
 class TaskCreate(BaseModel):
@@ -21,6 +58,9 @@ class TaskCreate(BaseModel):
     Attributes:
         title: Task title/summary (required, 1-200 chars, non-empty)
         description: Detailed task description (optional, max 1000 chars)
+        priority: Task priority - "low", "medium", or "high" (default: "medium")
+        tags: Comma-separated lowercase labels (optional, max 500 chars)
+        due_date: Optional due date for the task (UTC)
     """
 
     title: str = Field(
@@ -34,6 +74,22 @@ class TaskCreate(BaseModel):
         default=None,
         max_length=1000,
         description="Detailed task description (optional)"
+    )
+
+    priority: Literal["low", "medium", "high"] = Field(
+        default="medium",
+        description="Task priority level: 'low', 'medium', or 'high'"
+    )
+
+    tags: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Comma-separated lowercase labels, e.g. 'work,urgent' (optional)"
+    )
+
+    due_date: Optional[datetime] = Field(
+        default=None,
+        description="Optional due date for the task (UTC)"
     )
 
     @field_validator("title")
@@ -58,6 +114,26 @@ class TaskCreate(BaseModel):
             raise ValueError("Title cannot be empty or contain only whitespace")
         return stripped
 
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: Optional[str]) -> Optional[str]:
+        """
+        Normalize the tags string and reject labels containing whitespace.
+
+        Splits on ',', strips and lowercases each label, drops empties, and
+        rejoins the result. Returns ``None`` when the result is empty.
+
+        Args:
+            v: Raw tags string (or None)
+
+        Returns:
+            Normalized comma-separated tags string, or None
+
+        Raises:
+            ValueError: If any individual label contains internal whitespace
+        """
+        return _normalize_tags(v)
+
 
 class TaskUpdate(BaseModel):
     """
@@ -70,6 +146,9 @@ class TaskUpdate(BaseModel):
         title: Updated task title (optional, 1-200 chars, non-empty)
         description: Updated task description (optional, max 1000 chars)
         completed: Updated completion status (optional)
+        priority: Updated priority - "low", "medium", or "high" (optional)
+        tags: Updated comma-separated lowercase labels (optional, max 500 chars)
+        due_date: Updated due date (optional, UTC)
     """
 
     title: Optional[str] = Field(
@@ -88,6 +167,22 @@ class TaskUpdate(BaseModel):
     completed: Optional[bool] = Field(
         default=None,
         description="Updated completion status (optional)"
+    )
+
+    priority: Optional[Literal["low", "medium", "high"]] = Field(
+        default=None,
+        description="Updated task priority: 'low', 'medium', or 'high' (optional)"
+    )
+
+    tags: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Updated comma-separated lowercase labels (optional)"
+    )
+
+    due_date: Optional[datetime] = Field(
+        default=None,
+        description="Updated due date for the task (UTC, optional)"
     )
 
     @field_validator("title")
@@ -114,6 +209,26 @@ class TaskUpdate(BaseModel):
             raise ValueError("Title cannot be empty or contain only whitespace")
         return stripped
 
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: Optional[str]) -> Optional[str]:
+        """
+        Normalize the tags string and reject labels containing whitespace.
+
+        Splits on ',', strips and lowercases each label, drops empties, and
+        rejoins the result. Returns ``None`` when the result is empty.
+
+        Args:
+            v: Raw tags string (or None)
+
+        Returns:
+            Normalized comma-separated tags string, or None
+
+        Raises:
+            ValueError: If any individual label contains internal whitespace
+        """
+        return _normalize_tags(v)
+
 
 class TaskResponse(BaseModel):
     """
@@ -128,6 +243,9 @@ class TaskResponse(BaseModel):
         title: Task title/summary
         description: Detailed task description (optional)
         completed: Task completion status
+        priority: Task priority level ("low", "medium", "high")
+        tags: Comma-separated lowercase labels (optional)
+        due_date: Optional due date for the task (UTC)
         created_at: Timestamp when task was created (UTC)
         updated_at: Timestamp when task was last modified (UTC)
     """
@@ -137,6 +255,17 @@ class TaskResponse(BaseModel):
     title: str = Field(description="Task title/summary")
     description: Optional[str] = Field(description="Detailed task description")
     completed: bool = Field(description="Task completion status")
+    priority: Literal["low", "medium", "high"] = Field(
+        description="Task priority level: 'low', 'medium', or 'high'"
+    )
+    tags: Optional[str] = Field(
+        default=None,
+        description="Comma-separated lowercase labels (e.g. 'work,urgent')"
+    )
+    due_date: Optional[datetime] = Field(
+        default=None,
+        description="Optional due date for the task (UTC)"
+    )
     created_at: datetime = Field(description="Timestamp when task was created (UTC)")
     updated_at: datetime = Field(description="Timestamp when task was last modified (UTC)")
 
@@ -149,6 +278,9 @@ class TaskResponse(BaseModel):
                 "title": "Complete project documentation",
                 "description": "Write comprehensive API documentation with examples",
                 "completed": False,
+                "priority": "high",
+                "tags": "work,docs",
+                "due_date": "2024-02-01T17:00:00Z",
                 "created_at": "2024-01-15T10:30:00Z",
                 "updated_at": "2024-01-15T10:30:00Z"
             }

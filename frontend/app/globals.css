@@ -2,26 +2,359 @@
 @tailwind components;
 @tailwind utilities;
 
+/* -----------------------------------------------------------------------
+   Design tokens
+----------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050614;
+  --foreground: #f1f5f9;
+  --ring: 139 92 246;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  min-height: 100%;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
+/* Slim, glass-friendly scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Visible focus ring on every interactive element */
+:focus-visible {
+  outline: 2px solid rgb(var(--ring) / 0.9);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Aurora animated background
+----------------------------------------------------------------------- */
+.bg-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 12% 18%,
+      rgba(99, 102, 241, 0.55),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 70% 60% at 88% 22%,
+      rgba(217, 70, 239, 0.45),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 90% 70% at 50% 90%,
+      rgba(34, 211, 238, 0.35),
+      transparent 60%
+    ),
+    linear-gradient(180deg, #050614 0%, #0a0820 50%, #050614 100%);
+}
+
+/* Floating colored blobs for depth */
+.bg-aurora::before,
+.bg-aurora::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.55;
+  will-change: transform;
+}
+
+.bg-aurora::before {
+  width: 520px;
+  height: 520px;
+  left: -120px;
+  top: -120px;
+  background: radial-gradient(circle, #6366f1 0%, transparent 70%);
+  animation: aurora 20s ease-in-out infinite;
+}
+
+.bg-aurora::after {
+  width: 600px;
+  height: 600px;
+  right: -160px;
+  bottom: -160px;
+  background: radial-gradient(circle, #d946ef 0%, transparent 70%);
+  animation: aurora 24s ease-in-out infinite reverse;
+}
+
+/* Subtle grain to soften gradients */
+.bg-aurora-grain {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.6) 1px,
+    transparent 1px
+  );
+  background-size: 3px 3px;
+}
+
+/* -----------------------------------------------------------------------
+   Glass utilities + components
+----------------------------------------------------------------------- */
+@layer components {
+  .glass {
+    @apply rounded-2xl border border-white/15 bg-white/[0.06] shadow-glass backdrop-blur-xl;
+  }
+
+  .glass-strong {
+    @apply rounded-2xl border border-white/20 bg-white/[0.10] shadow-glass-lg backdrop-blur-2xl;
+  }
+
+  .glass-input {
+    @apply w-full rounded-xl border border-white/15 bg-white/[0.06]
+           px-4 py-2.5 text-slate-100 placeholder:text-slate-400/70
+           shadow-inner shadow-black/10 backdrop-blur-md
+           transition-colors
+           focus:border-brand-400/60 focus:bg-white/[0.10]
+           focus:outline-none focus:ring-2 focus:ring-brand-400/40
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .glass-textarea {
+    @apply glass-input min-h-[6rem] resize-y leading-relaxed;
+  }
+
+  .glass-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+           border border-white/15 bg-white/[0.08] px-4 py-2.5
+           text-sm font-medium text-slate-100 shadow-glass
+           backdrop-blur-md transition-all
+           hover:border-white/25 hover:bg-white/[0.14]
+           active:scale-[0.98]
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* ============================================================
+     LIQUID GLASS — Apple-style refractive surface (header only)
+     Layered: saturated blur + multi-stop tint + inset highlights
+     + drifting specular sheen on hover.
+  ============================================================ */
+  .liquid-header {
+    position: relative;
+    isolation: isolate;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.35),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.06),
+      0 12px 40px -16px rgba(0, 0, 0, 0.5);
+  }
+  .liquid-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        80% 100% at 0% 0%,
+        rgba(255, 255, 255, 0.18) 0%,
+        rgba(255, 255, 255, 0) 60%
+      ),
+      radial-gradient(
+        70% 100% at 100% 100%,
+        rgba(217, 70, 239, 0.10) 0%,
+        rgba(99, 102, 241, 0) 70%
+      );
+    pointer-events: none;
+    z-index: 0;
+  }
+  .liquid-header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      115deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.16) 48%,
+      rgba(255, 255, 255, 0.04) 52%,
+      transparent 70%
+    );
+    background-size: 220% 220%;
+    background-position: -50% -50%;
+    transition: background-position 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    z-index: 0;
+  }
+  .liquid-header:hover::after {
+    background-position: 150% 150%;
+  }
+  .liquid-header > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .glass-btn-primary {
+    @apply relative inline-flex items-center justify-center gap-2 overflow-hidden
+           rounded-xl border border-white/20 px-5 py-2.5 text-sm font-semibold
+           text-white shadow-[0_10px_40px_-10px_rgba(139,92,246,0.65)]
+           transition-all
+           bg-[linear-gradient(135deg,#6366f1_0%,#8b5cf6_50%,#d946ef_100%)]
+           hover:shadow-[0_12px_50px_-10px_rgba(217,70,239,0.7)]
+           hover:brightness-110
+           active:scale-[0.98]
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .glass-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+           border border-rose-400/30 bg-rose-500/15 px-4 py-2.5
+           text-sm font-semibold text-rose-200 shadow-[0_8px_30px_-10px_rgba(244,63,94,0.6)]
+           transition-all backdrop-blur-md
+           hover:bg-rose-500/25 hover:border-rose-400/50
+           active:scale-[0.98]
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .glass-chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-white/15
+           bg-white/[0.08] px-2.5 py-0.5 text-xs font-medium text-slate-200
+           backdrop-blur-md;
+  }
+
+  .priority-high {
+    @apply inline-flex items-center gap-1 rounded-full border border-rose-400/40
+           bg-rose-500/15 px-2.5 py-0.5 text-xs font-semibold text-rose-200
+           shadow-[0_0_12px_-2px_rgba(244,63,94,0.55)];
+  }
+  .priority-medium {
+    @apply inline-flex items-center gap-1 rounded-full border border-amber-400/40
+           bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-200
+           shadow-[0_0_12px_-2px_rgba(245,158,11,0.45)];
+  }
+  .priority-low {
+    @apply inline-flex items-center gap-1 rounded-full border border-emerald-400/40
+           bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-200
+           shadow-[0_0_12px_-2px_rgba(16,185,129,0.45)];
+  }
+
+  /* Section heading with gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent
+           bg-[linear-gradient(135deg,#a5b4fc_0%,#c4b5fd_45%,#f0abfc_100%)];
+  }
+
+  /* Skeleton shimmer card */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.10) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 1000px 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /* Custom checkbox */
+  .glass-check {
+    @apply relative grid h-6 w-6 place-items-center rounded-md border
+           border-white/30 bg-white/[0.06] transition-all duration-200
+           hover:border-white/50;
+  }
+  .glass-check[data-checked='true'] {
+    @apply border-transparent
+           bg-[linear-gradient(135deg,#6366f1_0%,#8b5cf6_50%,#d946ef_100%)]
+           shadow-[0_0_18px_-2px_rgba(139,92,246,0.7)];
+    transform: scale(1.05);
+  }
+
+  /* Segmented control */
+  .seg-group {
+    @apply inline-flex items-center gap-1 rounded-xl border border-white/10
+           bg-white/[0.05] p-1 backdrop-blur-md;
+  }
+  .seg-btn {
+    @apply rounded-lg px-3 py-1.5 text-xs font-medium text-slate-300
+           transition-all hover:text-white;
+  }
+  .seg-btn[data-active='true'] {
+    @apply bg-white/[0.14] text-white shadow-[0_4px_14px_-4px_rgba(0,0,0,0.5)];
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Utilities
+----------------------------------------------------------------------- */
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Decorative gradient ring used around buttons / cards */
+  .ring-gradient::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, #6366f1, #d946ef, #22d3ee);
+    -webkit-mask: linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
   }
 }

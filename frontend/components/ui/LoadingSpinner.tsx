@@ -1,5 +1,4 @@
-// LoadingSpinner component
-// Implements T020 from tasks.md
+// LoadingSpinner component.
 
 import React from 'react';
 
@@ -10,32 +9,29 @@ interface LoadingSpinnerProps {
 }
 
 /**
- * Reusable LoadingSpinner component for loading states
- * Accessible with proper ARIA attributes
+ * Reusable LoadingSpinner component for loading states.
  */
 export function LoadingSpinner({
   size = 'md',
   color = 'primary',
   text,
 }: LoadingSpinnerProps) {
-  // Size styles
-  const sizeStyles = {
+  const sizes = {
     sm: 'h-4 w-4',
     md: 'h-8 w-8',
     lg: 'h-12 w-12',
   };
 
-  // Color styles
-  const colorStyles = {
-    primary: 'text-blue-600',
+  const colors = {
+    primary: 'text-brand-300',
     white: 'text-white',
-    gray: 'text-gray-600',
+    gray: 'text-slate-400',
   };
 
   return (
     <div className="flex flex-col items-center justify-center gap-2">
       <svg
-        className={`animate-spin ${sizeStyles[size]} ${colorStyles[color]}`}
+        className={`animate-spin ${sizes[size]} ${colors[color]}`}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -49,15 +45,15 @@ export function LoadingSpinner({
           r="10"
           stroke="currentColor"
           strokeWidth="4"
-        ></circle>
+        />
         <path
-          className="opacity-75"
+          className="opacity-90"
           fill="currentColor"
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-        ></path>
+        />
       </svg>
       {text && (
-        <p className={`text-sm ${colorStyles[color]}`} aria-live="polite">
+        <p className={`text-sm ${colors[color]}`} aria-live="polite">
           {text}
         </p>
       )}

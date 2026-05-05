@@ -13,7 +13,6 @@ from sqlmodel import Field, SQLModel, Relationship
 
 if TYPE_CHECKING:
     from .task import Task
-    from .conversation import Conversation
 
 
 class User(SQLModel, table=True):
@@ -21,7 +20,7 @@ class User(SQLModel, table=True):
     User entity representing an authenticated user account.
 
     Each user has a unique email address used for authentication and can own
-    multiple tasks and conversations. Passwords are stored as bcrypt hashes for security.
+    multiple tasks. Passwords are stored as bcrypt hashes for security.
 
     Attributes:
         id: Unique user identifier (UUID, auto-generated)
@@ -30,7 +29,6 @@ class User(SQLModel, table=True):
         created_at: Timestamp when user account was created (UTC, auto-generated)
         updated_at: Timestamp when user account was last modified (UTC, auto-updated)
         tasks: List of tasks owned by this user (one-to-many relationship)
-        conversations: List of conversations owned by this user (one-to-many relationship)
     """
     __tablename__ = "users"
 
@@ -68,6 +66,5 @@ class User(SQLModel, table=True):
         description="Timestamp when user account was last modified (UTC)"
     )
 
-    # Relationships
+    # Relationship to tasks (one-to-many)
     tasks: List["Task"] = Relationship(back_populates="user")
-    conversations: List["Conversation"] = Relationship(back_populates="user")

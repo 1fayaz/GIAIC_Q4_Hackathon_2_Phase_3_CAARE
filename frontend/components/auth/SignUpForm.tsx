@@ -1,5 +1,4 @@
-// SignUpForm component with React Hook Form
-// Implements T028, T031, T032, T034, T036, T038, T039 from tasks.md
+// SignUpForm component with React Hook Form.
 
 'use client';
 
@@ -29,29 +28,18 @@ export function SignUpForm() {
     handleSubmit,
     watch,
     formState: { errors },
-  } = useForm<SignUpFormData>({
-    mode: 'onBlur',
-  });
+  } = useForm<SignUpFormData>({ mode: 'onBlur' });
 
-  // Watch password field for confirmation validation
   const password = watch('password');
 
-  /**
-   * Handle form submission
-   * T034: Connect to Better Auth signup API
-   * T038: Redirect to /tasks after successful signup
-   */
   const onSubmit = async (data: SignUpFormData) => {
     setIsLoading(true);
     setApiError(null);
 
     try {
       await signUp(data.email, data.password);
-
-      // T038: Redirect to /tasks after successful signup
       router.push('/tasks');
     } catch (error) {
-      // T036: Display error message for signup failures
       if (error instanceof ApiError) {
         setApiError(error.message);
       } else {
@@ -62,9 +50,40 @@ export function SignUpForm() {
     }
   };
 
+  const mailIcon = (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
+    </svg>
+  );
+
+  const lockIcon = (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="11" width="16" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 018 0v4" />
+    </svg>
+  );
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      {/* T036: Display API error message */}
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       {apiError && (
         <ErrorMessage
           message={apiError}
@@ -73,13 +92,14 @@ export function SignUpForm() {
         />
       )}
 
-      {/* Email field with validation (T031) */}
       <Input
         label="Email address"
         type="email"
         autoComplete="email"
         required
         fullWidth
+        placeholder="you@example.com"
+        leftIcon={mailIcon}
         error={errors.email?.message}
         {...register('email', {
           required: 'Email is required',
@@ -90,15 +110,16 @@ export function SignUpForm() {
         })}
       />
 
-      {/* Password field with validation (T032) */}
       <Input
         label="Password"
         type="password"
         autoComplete="new-password"
         required
         fullWidth
+        placeholder="At least 12 characters"
+        leftIcon={lockIcon}
         error={errors.password?.message}
-        helperText="Must be at least 12 characters with letter, number, and special character"
+        helperText="Must be 12+ chars with letters, numbers, and a symbol (@$!%*#?&)"
         {...register('password', {
           required: 'Password is required',
           minLength: {
@@ -106,28 +127,29 @@ export function SignUpForm() {
             message: 'Password must be at least 12 characters',
           },
           pattern: {
-            value: /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{12,}$/,
-            message: 'Password must contain at least one letter, one number, and one special character (@$!%*#?&)',
+            value:
+              /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{12,}$/,
+            message:
+              'Must contain a letter, a number, and a special character (@$!%*#?&)',
           },
         })}
       />
 
-      {/* Confirm password field with match validation (T032) */}
       <Input
         label="Confirm password"
         type="password"
         autoComplete="new-password"
         required
         fullWidth
+        placeholder="Repeat your password"
+        leftIcon={lockIcon}
         error={errors.confirmPassword?.message}
         {...register('confirmPassword', {
           required: 'Please confirm your password',
-          validate: (value) =>
-            value === password || 'Passwords do not match',
+          validate: (value) => value === password || 'Passwords do not match',
         })}
       />
 
-      {/* T039: Loading state during authentication */}
       <Button
         type="submit"
         variant="primary"

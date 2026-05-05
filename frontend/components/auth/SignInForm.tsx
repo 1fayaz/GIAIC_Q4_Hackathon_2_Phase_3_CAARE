@@ -1,5 +1,4 @@
-// SignInForm component with React Hook Form
-// Implements T027, T029, T030, T033, T035, T037, T039 from tasks.md
+// SignInForm component with React Hook Form.
 
 'use client';
 
@@ -27,38 +26,20 @@ export function SignInForm() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<SignInFormData>({
-    mode: 'onBlur',
-  });
+  } = useForm<SignInFormData>({ mode: 'onBlur' });
 
-  /**
-   * Handle form submission
-   * T033: Connect to Better Auth signin API
-   * T037: Redirect to /tasks after successful signin
-   */
   const onSubmit = async (data: SignInFormData) => {
-    console.log('SignInForm: Form submitted', { email: data.email });
     setIsLoading(true);
     setApiError(null);
 
     try {
-      console.log('SignInForm: Calling signIn...');
       await signIn(data.email, data.password);
-      console.log('SignInForm: Sign in successful, redirecting...');
-
-      // T037: Redirect to /tasks after successful signin
       router.push('/tasks');
     } catch (error) {
-      console.error('SignInForm: Sign in error:', error);
-      console.error('SignInForm: Error type:', typeof error);
-      console.error('SignInForm: Error constructor:', error?.constructor?.name);
-      console.error('SignInForm: Is ApiError?', error instanceof ApiError);
-
-      // T035: Display error message for signin failures
       if (error instanceof ApiError) {
         setApiError(error.message);
       } else if (error instanceof Error) {
-        setApiError(`Error: ${error.message}`);
+        setApiError(error.message);
       } else {
         setApiError('An unexpected error occurred. Please try again.');
       }
@@ -68,8 +49,7 @@ export function SignInForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      {/* T035: Display API error message */}
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       {apiError && (
         <ErrorMessage
           message={apiError}
@@ -78,13 +58,28 @@ export function SignInForm() {
         />
       )}
 
-      {/* Email field with validation (T029) */}
       <Input
         label="Email address"
         type="email"
         autoComplete="email"
         required
         fullWidth
+        placeholder="you@example.com"
+        leftIcon={
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="M3 7l9 6 9-6" />
+          </svg>
+        }
         error={errors.email?.message}
         {...register('email', {
           required: 'Email is required',
@@ -95,13 +90,28 @@ export function SignInForm() {
         })}
       />
 
-      {/* Password field with validation (T030) */}
       <Input
         label="Password"
         type="password"
         autoComplete="current-password"
         required
         fullWidth
+        placeholder="Your password"
+        leftIcon={
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="4" y="11" width="16" height="9" rx="2" />
+            <path d="M8 11V7a4 4 0 018 0v4" />
+          </svg>
+        }
         error={errors.password?.message}
         {...register('password', {
           required: 'Password is required',
@@ -112,7 +122,6 @@ export function SignInForm() {
         })}
       />
 
-      {/* T039: Loading state during authentication */}
       <Button
         type="submit"
         variant="primary"

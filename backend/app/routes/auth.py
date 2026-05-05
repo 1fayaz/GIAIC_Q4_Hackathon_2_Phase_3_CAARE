@@ -28,6 +28,25 @@ from app.dependencies.auth import get_current_user
 # Initialize settings
 settings = get_settings()
 
+
+def _cookie_kwargs() -> dict:
+    """
+    Return cookie attributes that vary by environment.
+
+    Production (HTTPS, frontend on a different origin from the API) needs
+    `Secure=True` and `SameSite=None` so the browser actually sends the
+    cookie cross-site. Development stays on `Secure=False, SameSite=Lax`
+    so it works over plain http://localhost.
+    """
+    is_prod = settings.ENVIRONMENT.lower() == "production"
+    return {
+        "httponly": True,
+        "secure": is_prod,
+        "samesite": "none" if is_prod else "lax",
+        "path": "/",
+    }
+
+
 # Create router with prefix and tags
 router = APIRouter(
     prefix="/api/auth",
@@ -116,11 +135,8 @@ async def register(
         response.set_cookie(
             key="auth_token",
             value=access_token,
-            httponly=True,  # Prevents JavaScript access (XSS protection)
-            secure=False,   # Set to True in production with HTTPS, False for local dev
-            samesite="lax", # CSRF protection
-            max_age=settings.JWT_EXPIRATION,  # Cookie expiration matches token expiration
-            path="/"        # Cookie available for all paths
+            max_age=settings.JWT_EXPIRATION,
+            **_cookie_kwargs(),
         )
 
         # Return authentication response (token not included in body for security)
@@ -234,11 +250,8 @@ async def login(
     response.set_cookie(
         key="auth_token",
         value=access_token,
-        httponly=True,  # Prevents JavaScript access (XSS protection)
-        secure=False,   # Set to True in production with HTTPS, False for local dev
-        samesite="lax", # CSRF protection
-        max_age=settings.JWT_EXPIRATION,  # Cookie expiration matches token expiration
-        path="/"        # Cookie available for all paths
+        max_age=settings.JWT_EXPIRATION,
+        **_cookie_kwargs(),
     )
 
     # Return authentication response (token not included in body for security)
@@ -285,10 +298,7 @@ async def logout(response: Response) -> dict:
     # Clear the authentication cookie by setting max_age to 0
     response.delete_cookie(
         key="auth_token",
-        path="/",
-        httponly=True,
-        secure=False,  # Set to True in production with HTTPS, False for local dev
-        samesite="lax"
+        **_cookie_kwargs(),
     )
 
     return {

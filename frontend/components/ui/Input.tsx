@@ -1,18 +1,20 @@
-// Reusable Input component with validation styles
-// Implements T019 from tasks.md
+// Reusable Input component (glass).
 
-import React, { InputHTMLAttributes, forwardRef, useId } from 'react';
+import React, { InputHTMLAttributes, forwardRef, useId, ReactNode } from 'react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   helperText?: string;
   fullWidth?: boolean;
+  /** Optional left-aligned icon (rendered inside the input) */
+  leftIcon?: ReactNode;
+  /** Optional right-aligned icon */
+  rightIcon?: ReactNode;
 }
 
 /**
- * Reusable Input component with label, error, and helper text support
- * Follows accessibility best practices with proper ARIA attributes
+ * Glass Input with optional label, error, helper text, and inline icons.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   (
@@ -21,6 +23,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       error,
       helperText,
       fullWidth = false,
+      leftIcon,
+      rightIcon,
       className = '',
       id,
       required,
@@ -28,69 +32,67 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     },
     ref
   ) => {
-    // Generate unique ID if not provided (stable between server and client)
     const generatedId = useId();
     const inputId = id || generatedId;
 
-    // Base input styles
-    const baseStyles =
-      'block px-3 py-2 border rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-0 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed';
-
-    // Error state styles
-    const errorStyles = error
-      ? 'border-red-500 focus:ring-red-500 focus:border-red-500'
-      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
-
-    // Width styles
-    const widthStyles = fullWidth ? 'w-full' : '';
-
-    // Combine all styles
-    const combinedStyles = `${baseStyles} ${errorStyles} ${widthStyles} ${className}`;
+    const errorClasses = error
+      ? 'border-rose-400/60 focus:border-rose-400 focus:ring-rose-400/40'
+      : '';
 
     return (
       <div className={fullWidth ? 'w-full' : ''}>
-        {/* Label */}
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-gray-700 mb-1"
+            className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-300/80"
           >
             {label}
-            {required && <span className="text-red-500 ml-1">*</span>}
+            {required && <span className="ml-1 text-rose-400">*</span>}
           </label>
         )}
 
-        {/* Input */}
-        <input
-          ref={ref}
-          id={inputId}
-          className={combinedStyles}
-          aria-invalid={error ? 'true' : 'false'}
-          aria-describedby={
-            error
-              ? `${inputId}-error`
-              : helperText
-              ? `${inputId}-helper`
-              : undefined
-          }
-          required={required}
-          {...props}
-        />
+        <div className="relative">
+          {leftIcon && (
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              {leftIcon}
+            </span>
+          )}
+          <input
+            ref={ref}
+            id={inputId}
+            className={`glass-input ${leftIcon ? 'pl-10' : ''} ${
+              rightIcon ? 'pr-10' : ''
+            } ${errorClasses} ${className}`}
+            aria-invalid={error ? 'true' : 'false'}
+            aria-describedby={
+              error
+                ? `${inputId}-error`
+                : helperText
+                  ? `${inputId}-helper`
+                  : undefined
+            }
+            required={required}
+            {...props}
+          />
+          {rightIcon && (
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+              {rightIcon}
+            </span>
+          )}
+        </div>
 
-        {/* Error message */}
         {error && (
           <p
             id={`${inputId}-error`}
-            className="mt-1 text-sm text-red-600"
+            className="mt-1.5 text-xs text-rose-300"
             role="alert"
           >
             {error}
           </p>
         )}
 
-        {/* Helper text */}
         {!error && helperText && (
-          <p id={`${inputId}-helper`} className="mt-1 text-sm text-gray-500">
+          <p id={`${inputId}-helper`} className="mt-1.5 text-xs text-slate-400">
             {helperText}
           </p>
         )}

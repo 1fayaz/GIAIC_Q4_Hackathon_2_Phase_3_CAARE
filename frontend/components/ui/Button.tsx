@@ -1,5 +1,4 @@
-// Reusable Button component with Tailwind styles
-// Implements T018 from tasks.md
+// Reusable Button component - glass / gradient variants on a dark theme.
 
 import React, { ButtonHTMLAttributes, ReactNode } from 'react';
 
@@ -12,8 +11,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 /**
- * Reusable Button component with multiple variants and sizes
- * Follows accessibility best practices with proper touch targets
+ * Reusable Button component with multiple variants and sizes.
+ * Uses the glass design language defined in globals.css.
  */
 export function Button({
   children,
@@ -25,48 +24,42 @@ export function Button({
   className = '',
   ...props
 }: ButtonProps) {
-  // Base styles (always applied)
-  const baseStyles =
-    'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+  const base =
+    'inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed';
 
-  // Variant styles
-  const variantStyles = {
+  const variants: Record<NonNullable<ButtonProps['variant']>, string> = {
     primary:
-      'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 active:bg-blue-800',
+      'border border-white/20 text-white shadow-[0_10px_40px_-10px_rgba(139,92,246,0.65)] bg-[linear-gradient(135deg,#6366f1_0%,#8b5cf6_50%,#d946ef_100%)] hover:brightness-110 hover:shadow-[0_12px_50px_-10px_rgba(217,70,239,0.7)] active:scale-[0.98]',
     secondary:
-      'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 active:bg-gray-400',
+      'border border-white/15 bg-white/[0.08] text-slate-100 backdrop-blur-md shadow-glass hover:bg-white/[0.14] hover:border-white/25 active:scale-[0.98]',
     danger:
-      'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 active:bg-red-800',
+      'border border-rose-400/30 bg-rose-500/15 text-rose-100 shadow-[0_8px_30px_-10px_rgba(244,63,94,0.6)] backdrop-blur-md hover:bg-rose-500/25 hover:border-rose-400/50 active:scale-[0.98]',
     ghost:
-      'bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-500 active:bg-gray-200',
+      'bg-transparent text-slate-200 hover:bg-white/[0.08] hover:text-white',
   };
 
-  // Size styles (minimum 44x44px touch target for accessibility)
-  const sizeStyles = {
-    sm: 'px-3 py-2 text-sm min-h-[44px]',
-    md: 'px-4 py-2.5 text-base min-h-[44px]',
-    lg: 'px-6 py-3 text-lg min-h-[48px]',
+  const sizes: Record<NonNullable<ButtonProps['size']>, string> = {
+    sm: 'px-3 py-2 text-sm min-h-[40px]',
+    md: 'px-4 py-2.5 text-sm min-h-[44px]',
+    lg: 'px-6 py-3 text-base min-h-[48px]',
   };
 
-  // Width styles
-  const widthStyles = fullWidth ? 'w-full' : '';
-
-  // Combine all styles
-  const combinedStyles = `${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthStyles} ${className}`;
+  const width = fullWidth ? 'w-full' : '';
 
   return (
     <button
-      className={combinedStyles}
+      className={`${base} ${variants[variant]} ${sizes[size]} ${width} ${className}`}
       disabled={disabled || isLoading}
       {...props}
     >
       {isLoading ? (
         <>
           <svg
-            className="animate-spin -ml-1 mr-2 h-4 w-4"
+            className="h-4 w-4 animate-spin"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <circle
               className="opacity-25"
@@ -75,14 +68,14 @@ export function Button({
               r="10"
               stroke="currentColor"
               strokeWidth="4"
-            ></circle>
+            />
             <path
-              className="opacity-75"
+              className="opacity-90"
               fill="currentColor"
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
+            />
           </svg>
-          Loading...
+          <span>Working...</span>
         </>
       ) : (
         children

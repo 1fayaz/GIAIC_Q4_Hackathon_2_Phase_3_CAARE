@@ -1,117 +1,158 @@
-// Tasks page - Complete CRUD operations
-// Implements T047, T051, T052, T057, T059, T066, T079, T089 from tasks.md
+// Tasks page - the dashboard hero. Header, stats, toolbar, list, modal create.
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTasks } from '@/hooks/useTasks';
 import { TaskList } from '@/components/tasks/TaskList';
 import { TaskForm } from '@/components/tasks/TaskForm';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { TasksToolbar } from '@/components/tasks/TasksToolbar';
+import { StatsCards } from '@/components/tasks/StatsCards';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
-import { Button } from '@/components/ui/Button';
-import { TaskFormData } from '@/lib/types';
+import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
+import { TaskFilters, TaskFormData } from '@/lib/types';
+import { collectAllTags } from '@/lib/tags';
 
-/**
- * Tasks page displays all tasks for the authenticated user with full CRUD operations
- * T051: Connect tasks page to useTasks hook to fetch data
- * T052: Implement loading state while fetching tasks
- * T057: Verify only authenticated user's tasks are displayed
- * T059: Add create task button
- * T066: Update task list after successful creation
- * T079: Update task list after successful edit
- * T089: Remove task from list after successful deletion
- */
+const DEFAULT_FILTERS: TaskFilters = {
+  search: '',
+  status: 'all',
+  sort_by: 'created_at',
+  order: 'desc',
+};
+
+function isFilterActive(filters: TaskFilters): boolean {
+  if (filters.search && filters.search.trim()) return true;
+  if (filters.status && filters.status !== 'all') return true;
+  if (filters.priority) return true;
+  if (filters.tag && filters.tag.trim()) return true;
+  if (filters.due_before) return true;
+  if (filters.due_after) return true;
+  return false;
+}
+
 export default function TasksPage() {
-  // T051: Connect to useTasks hook
-  const { tasks, isLoading, error, createTask, updateTask, deleteTask, refreshTasks } = useTasks();
+  const [filters, setFilters] = useState<TaskFilters>(DEFAULT_FILTERS);
+  const {
+    tasks,
+    isLoading,
+    isFetching,
+    error,
+    createTask,
+    updateTask,
+    deleteTask,
+    refreshTasks,
+  } = useTasks(filters);
 
-  // T059: State to show/hide create task form
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const { push } = useToast();
 
-  /**
-   * Handle task creation
-   * T066: Task list updates automatically via useTasks hook
-   */
-  const handleCreateTask = async (data: TaskFormData) => {
-    await createTask(data);
-    setShowCreateForm(false);
+  // We keep a separate, filter-free view of tasks for stats and the tag pool
+  // would be ideal, but to avoid an extra request we use what we have.
+  const tagSuggestions = useMemo(() => collectAllTags(tasks), [tasks]);
+
+  const handleCreate = async (data: TaskFormData) => {
+    try {
+      await createTask(data);
+      setIsCreateOpen(false);
+      push({ message: 'Task created.', variant: 'success' });
+    } catch (err) {
+      push({
+        message: err instanceof Error ? err.message : 'Failed to create task.',
+        variant: 'error',
+      });
+      throw err;
+    }
   };
 
-  /**
-   * Handle task update
-   * T079: Task list updates automatically via useTasks hook
-   */
-  const handleUpdateTask = async (
+  const handleUpdate = async (
     id: string,
     data: Partial<TaskFormData> & { completed?: boolean }
   ) => {
-    await updateTask(id, data);
+    try {
+      await updateTask(id, data);
+      if ('completed' in data) {
+        push({
+          message: data.completed ? 'Marked as done.' : 'Reopened.',
+          variant: 'success',
+          duration: 1800,
+        });
+      } else {
+        push({ message: 'Task updated.', variant: 'success' });
+      }
+    } catch (err) {
+      push({
+        message: err instanceof Error ? err.message : 'Failed to update task.',
+        variant: 'error',
+      });
+      throw err;
+    }
   };
 
-  /**
-   * Handle task deletion
-   * T089: Task list updates automatically via useTasks hook
-   */
-  const handleDeleteTask = async (id: string) => {
-    await deleteTask(id);
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteTask(id);
+      push({ message: 'Task deleted.', variant: 'success' });
+    } catch (err) {
+      push({
+        message: err instanceof Error ? err.message : 'Failed to delete task.',
+        variant: 'error',
+      });
+      throw err;
+    }
   };
+
+  const hasActive = isFilterActive(filters);
+  const clearFilters = () => setFilters(DEFAULT_FILTERS);
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Page header with create button */}
-      <div className="mb-8 flex items-center justify-between">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      {/* Hero header */}
+      <div className="animate-fadeIn flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Tasks</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Manage your personal task list
+          <h1 className="text-3xl font-bold tracking-tight text-gradient sm:text-4xl">
+            Your Tasks
+          </h1>
+          <p className="mt-2 max-w-xl text-sm text-slate-300/80">
+            Plan, prioritize, and ship. Search, filter and sort to focus on
+            what matters next.
           </p>
         </div>
 
-        {/* T059: Create task button */}
-        {!showCreateForm && (
-          <Button
-            variant="primary"
-            onClick={() => setShowCreateForm(true)}
-            disabled={isLoading}
+        <button
+          type="button"
+          onClick={() => setIsCreateOpen(true)}
+          className="glass-btn-primary self-start sm:self-auto"
+        >
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
           >
-            <svg
-              className="h-5 w-5 mr-2"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path d="M12 4v16m8-8H4"></path>
-            </svg>
-            Create Task
-          </Button>
-        )}
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New Task
+        </button>
       </div>
 
-      {/* Create task form */}
-      {showCreateForm && (
-        <div className="mb-8 bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Create New Task
-          </h2>
-          <TaskForm
-            onSubmit={handleCreateTask}
-            onCancel={() => setShowCreateForm(false)}
-          />
-        </div>
-      )}
+      {/* Stats */}
+      <StatsCards tasks={tasks} />
 
-      {/* T052: Loading state */}
-      {isLoading && (
-        <div className="flex justify-center py-12">
-          <LoadingSpinner size="lg" text="Loading tasks..." />
-        </div>
-      )}
+      {/* Toolbar */}
+      <TasksToolbar
+        filters={filters}
+        onChange={setFilters}
+        onClear={clearFilters}
+        tagSuggestions={tagSuggestions}
+        hasActive={hasActive}
+      />
 
-      {/* Error state */}
+      {/* Error */}
       {error && !isLoading && (
         <ErrorMessage
           message={error}
@@ -120,15 +161,34 @@ export default function TasksPage() {
         />
       )}
 
-      {/* T051, T057, T066, T079, T089: Task list with full CRUD operations */}
-      {!isLoading && !error && (
+      {/* Task list */}
+      {!error && (
         <TaskList
           tasks={tasks}
           isLoading={isLoading}
-          onUpdate={handleUpdateTask}
-          onDelete={handleDeleteTask}
+          isFetching={isFetching && !isLoading}
+          tagSuggestions={tagSuggestions}
+          hasActiveFilters={hasActive}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+          onClearFilters={clearFilters}
         />
       )}
+
+      {/* Create modal */}
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        title="Create a new task"
+        description="Capture the essentials. You can refine later."
+        size="lg"
+      >
+        <TaskForm
+          onSubmit={handleCreate}
+          onCancel={() => setIsCreateOpen(false)}
+          tagSuggestions={tagSuggestions}
+        />
+      </Modal>
     </div>
   );
 }

@@ -1,41 +1,51 @@
-// Root layout with Better Auth provider and global error boundary
-// Implements T022, T098, T104 from tasks.md
+// Root layout with Better Auth provider, Inter font, aurora background, error boundary.
 
-import type { Metadata, Viewport } from "next";
-import "./globals.css";
-import { AuthProvider } from "@/lib/auth";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { AuthProvider } from '@/lib/auth';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
-// T104: Add proper meta tags for SEO
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+});
+
 export const metadata: Metadata = {
-  title: "Todo App - Manage Your Tasks Efficiently",
-  description: "A modern, full-stack todo application with authentication, persistent storage, and real-time updates. Organize your tasks and boost productivity.",
-  keywords: ["todo", "task management", "productivity", "task list", "todo app", "task organizer"],
-  authors: [{ name: "Todo App Team" }],
-  creator: "Todo App",
-  publisher: "Todo App",
-  robots: "index, follow",
+  title: 'FAN Tasks - A premium task workspace',
+  description:
+    'Glassmorphism task workspace with priorities, tags, due dates, search, filters, and lightning-fast sync.',
+  keywords: [
+    'todo',
+    'task management',
+    'productivity',
+    'glassmorphism',
+    'aurora',
+    'priorities',
+    'tags',
+    'due dates',
+  ],
+  authors: [{ name: 'FAN Tasks' }],
+  creator: 'FAN Tasks',
+  publisher: 'FAN Tasks',
+  robots: 'index, follow',
   openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "https://todoapp.example.com",
-    title: "Todo App - Manage Your Tasks Efficiently",
-    description: "A modern, full-stack todo application with authentication and persistent storage.",
-    siteName: "Todo App",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Todo App - Manage Your Tasks Efficiently",
-    description: "A modern, full-stack todo application with authentication and persistent storage.",
+    type: 'website',
+    locale: 'en_US',
+    title: 'FAN Tasks - A premium task workspace',
+    description:
+      'Glassmorphism task workspace with priorities, tags, due dates, search, filters.',
+    siteName: 'FAN Tasks',
   },
 };
 
-// T104: Viewport configuration (Next.js 16+ requires separate export)
 export const viewport: Viewport = {
-  width: "device-width",
+  width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#3B82F6",
+  themeColor: '#0a0820',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({
@@ -44,14 +54,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased" suppressHydrationWarning>
-        {/* T098: Global error boundary */}
+    <html lang="en" className={inter.variable}>
+      <body
+        className="min-h-screen bg-slate-950 text-slate-100 antialiased font-sans"
+        suppressHydrationWarning
+      >
+        {/* Animated aurora gradient background (fixed, behind everything) */}
+        <div className="bg-aurora" aria-hidden="true" />
+        <div className="bg-aurora-grain" aria-hidden="true" />
+
         <ErrorBoundary>
-          {/* T022: Better Auth provider */}
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          <AuthProvider>{children}</AuthProvider>
         </ErrorBoundary>
       </body>
     </html>

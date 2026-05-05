@@ -50,9 +50,10 @@ All endpoints return standardized response format:
 """
 
 from datetime import datetime
-from typing import List
+from typing import List, Optional, Literal
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
@@ -103,6 +104,9 @@ async def create_task(
             title=task_data.title,
             description=task_data.description,
             completed=False,
+            priority=task_data.priority,
+            tags=task_data.tags,
+            due_date=task_data.due_date,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -135,19 +139,78 @@ async def create_task(
 @router.get(
     "",
     status_code=status.HTTP_200_OK,
-    summary="List all tasks for authenticated user",
-    description="Retrieves all tasks belonging to the authenticated user, ordered by creation date (newest first)"
+    summary="List tasks for the authenticated user with filtering and sorting",
+    description=(
+        "Retrieves tasks belonging to the authenticated user. Supports full-text "
+        "search across title/description, status/priority/tag/due-date filters, "
+        "and configurable sorting. All results remain strictly scoped to the "
+        "current user via JWT-derived user_id (FR-003)."
+    )
 )
 async def list_tasks(
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
+    search: Optional[str] = Query(
+        default=None,
+        max_length=200,
+        description="Case-insensitive substring match on title and description"
+    ),
+    status_filter: Literal["all", "active", "completed"] = Query(
+        default="all",
+        alias="status",
+        description="Filter by completion status: 'all' (default), 'active', or 'completed'"
+    ),
+    priority: Optional[Literal["low", "medium", "high"]] = Query(
+        default=None,
+        description="Filter by priority: 'low', 'medium', or 'high'"
+    ),
+    tag: Optional[str] = Query(
+        default=None,
+        max_length=100,
+        description="Match tasks whose tags string contains this label (case-insensitive)"
+    ),
+    due_before: Optional[datetime] = Query(
+        default=None,
+        description="Only include tasks with due_date <= this timestamp (UTC)"
+    ),
+    due_after: Optional[datetime] = Query(
+        default=None,
+        description="Only include tasks with due_date >= this timestamp (UTC)"
+    ),
+    sort_by: Literal[
+        "created_at", "updated_at", "due_date", "priority", "title"
+    ] = Query(
+        default="created_at",
+        description="Field to sort results by"
+    ),
+    order: Literal["asc", "desc"] = Query(
+        default="desc",
+        description="Sort direction: 'asc' or 'desc'"
+    ),
 ) -> dict:
     """
-    List all tasks for the authenticated user.
+    List tasks for the authenticated user with optional filtering and sorting.
+
+    User isolation is enforced via ``Task.user_id == current_user.id`` on every
+    query. Filters are applied conditionally; sorting is applied last.
+
+    Sorting notes:
+        - ``priority`` is ordered via a CASE expression so that
+          high < medium < low (ascending = high first).
+        - ``due_date`` always pushes NULL values to the end, regardless of
+          order direction (via ``nulls_last()``).
 
     Args:
         current_user: Authenticated user from JWT token (injected dependency)
         session: Database session (injected dependency)
+        search: Optional case-insensitive substring search over title/description
+        status_filter: Completion-status filter ('all' | 'active' | 'completed')
+        priority: Optional priority filter
+        tag: Optional substring match within the tags field
+        due_before: Optional upper bound on due_date
+        due_after: Optional lower bound on due_date
+        sort_by: Field to sort by
+        order: Sort direction ('asc' | 'desc')
 
     Returns:
         dict: Standardized success response with list of tasks
@@ -157,12 +220,69 @@ async def list_tasks(
         HTTPException: 500 if database operation fails
     """
     try:
-        # Query all tasks filtered by current_user.id, ordered by created_at descending
-        statement = (
-            select(Task)
-            .where(Task.user_id == current_user.id)
-            .order_by(Task.created_at.desc())
-        )
+        # Always start with the user-isolation predicate (FR-003)
+        statement = select(Task).where(Task.user_id == current_user.id)
+
+        # --- Filters (applied conditionally) ---
+
+        # Case-insensitive search across title and description
+        if search is not None:
+            search_term = search.strip()
+            if search_term:
+                like_pattern = f"%{search_term}%"
+                statement = statement.where(
+                    (Task.title.ilike(like_pattern))
+                    | (Task.description.ilike(like_pattern))
+                )
+
+        # Completion status: 'active' => not completed, 'completed' => completed
+        if status_filter == "active":
+            statement = statement.where(Task.completed.is_(False))
+        elif status_filter == "completed":
+            statement = statement.where(Task.completed.is_(True))
+
+        # Priority exact match
+        if priority is not None:
+            statement = statement.where(Task.priority == priority)
+
+        # Tag substring match (case-insensitive); input lowercased for consistency
+        if tag is not None:
+            tag_value = tag.strip().lower()
+            if tag_value:
+                statement = statement.where(Task.tags.ilike(f"%{tag_value}%"))
+
+        # Due date bounds (inclusive)
+        if due_before is not None:
+            statement = statement.where(Task.due_date <= due_before)
+        if due_after is not None:
+            statement = statement.where(Task.due_date >= due_after)
+
+        # --- Sorting (applied last) ---
+
+        if sort_by == "priority":
+            # Map textual priorities to a numeric rank so high < medium < low
+            # (ascending => high first).
+            priority_rank = case(
+                (Task.priority == "high", 1),
+                (Task.priority == "medium", 2),
+                (Task.priority == "low", 3),
+                else_=99,
+            )
+            sort_expr = priority_rank.asc() if order == "asc" else priority_rank.desc()
+            statement = statement.order_by(sort_expr)
+        elif sort_by == "due_date":
+            # NULL due dates always sink to the end regardless of direction.
+            base = Task.due_date.asc() if order == "asc" else Task.due_date.desc()
+            statement = statement.order_by(base.nulls_last())
+        else:
+            sort_column = {
+                "created_at": Task.created_at,
+                "updated_at": Task.updated_at,
+                "title": Task.title,
+            }[sort_by]
+            sort_expr = sort_column.asc() if order == "asc" else sort_column.desc()
+            statement = statement.order_by(sort_expr)
+
         result = await session.execute(statement)
         tasks = result.scalars().all()
 

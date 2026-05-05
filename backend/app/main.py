@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import get_settings
 from app.core.database import create_db_and_tables, close_db_connection
-from app.routes import tasks, auth, chat
+from app.routes import tasks, auth
 from app.schemas.response import error_response
 
 # Load application settings
@@ -56,11 +56,7 @@ tags_metadata = [
     },
     {
         "name": "tasks",
-        "description": "Task management operations. All endpoints require authentication via JWT token.",
-    },
-    {
-        "name": "chat",
-        "description": "Conversational task management with AI agent. Send messages to manage tasks through natural language.",
+        "description": "Task management operations. All endpoints require a user_id path parameter for data isolation.",
     },
     {
         "name": "Health",
@@ -71,27 +67,20 @@ tags_metadata = [
 # T027: Create FastAPI application instance with comprehensive metadata
 app = FastAPI(
     title="Task Management API",
-    version="2.0.0",
+    version="1.0.0",
     description="""
-REST API for managing tasks with AI-powered conversational interface.
+REST API for managing tasks with user-based data isolation.
 
-This API provides both traditional CRUD operations and conversational AI-powered
-task management. All endpoints require JWT authentication via httpOnly cookies.
+This API provides CRUD operations for task management. All endpoints
+require a user_id path parameter for data isolation. In future phases,
+user_id will be extracted from JWT tokens instead of path parameters.
 
 **Key Features:**
-- AI-powered conversational task management (Phase 3)
-- Natural language task operations through chat interface
-- Traditional CRUD operations for tasks
-- User-based data isolation (JWT authentication)
+- Create, read, update, and delete tasks
+- User-based data isolation (tasks scoped to user_id)
 - Automatic timestamp management
 - Task completion toggle endpoint
 - Interactive API documentation (Swagger UI)
-
-**Conversational AI:**
-- Send messages to AI agent for natural language task management
-- Agent can add, list, update, delete, and complete tasks
-- Conversation history maintained across sessions
-- Tool invocation tracking and metadata
 
 **Documentation:**
 - Interactive Swagger UI: http://localhost:8000/docs
@@ -187,7 +176,6 @@ async def options_handler(full_path: str):
 # T022: Register authentication routes with /api/auth prefix
 app.include_router(auth.router)
 app.include_router(tasks.router)
-app.include_router(chat.router)
 
 
 @app.get("/", tags=["Health"])

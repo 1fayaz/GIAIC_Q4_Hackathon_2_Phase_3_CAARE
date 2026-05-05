@@ -1,145 +1,159 @@
-// useTasks custom hook for task data fetching
-// Implements T017 from tasks.md
+// useTasks custom hook for task data fetching.
+// Now supports server-side filters/search/sort with debounced search.
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Task, TaskFormData, ApiError } from '@/lib/types';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Task, TaskFormData, TaskFilters, ApiError } from '@/lib/types';
 import { apiClient } from '@/lib/api-client';
 
 interface UseTasksReturn {
   // State
   tasks: Task[];
   isLoading: boolean;
+  isFetching: boolean;
   error: string | null;
 
   // Actions
   getTasks: () => Promise<void>;
   createTask: (data: TaskFormData) => Promise<Task>;
-  updateTask: (id: string, data: Partial<TaskFormData> & { completed?: boolean }) => Promise<Task>;
+  updateTask: (
+    id: string,
+    data: Partial<TaskFormData> & { completed?: boolean }
+  ) => Promise<Task>;
   deleteTask: (id: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
 }
 
 /**
- * Custom hook to manage task data fetching and mutations
- * Provides CRUD operations for tasks with loading and error states
+ * Custom hook to manage task data fetching and mutations.
+ * Pass `filters` to drive the GET /api/tasks query string.
+ * Search input is debounced ~300ms so typing doesn't spam the API.
  */
-export function useTasks(): UseTasksReturn {
+export function useTasks(filters?: TaskFilters): UseTasksReturn {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // `isLoading` reflects the very first fetch. `isFetching` is true on every refetch.
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  // Debounce the search field so typing doesn't fire one request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState(filters?.search ?? '');
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedSearch(filters?.search ?? '');
+    }, 300);
+    return () => clearTimeout(id);
+  }, [filters?.search]);
+
+  // The effective filter set: same as `filters` but with the debounced search.
+  const effectiveFilters = useMemo<TaskFilters | undefined>(() => {
+    if (!filters) return undefined;
+    return { ...filters, search: debouncedSearch };
+  }, [
+    filters?.status,
+    filters?.priority,
+    filters?.tag,
+    filters?.due_before,
+    filters?.due_after,
+    filters?.sort_by,
+    filters?.order,
+    debouncedSearch,
+    // intentionally omit `filters` itself; we depend on its individual fields
+    // so callers can pass a fresh object literal each render without triggering
+    // an extra refetch.
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Fetch all tasks for the authenticated user
+   * Fetch tasks for the authenticated user, optionally with filters.
    */
   const getTasks = useCallback(async () => {
-    setIsLoading(true);
+    setIsFetching(true);
     setError(null);
 
     try {
-      const fetchedTasks = await apiClient.getTasks();
-      setTasks(fetchedTasks);
+      const fetched = await apiClient.getTasks(effectiveFilters);
+      setTasks(fetched);
     } catch (err) {
       // Suppress 401 errors - they're handled by automatic redirect to /signin
       if (err instanceof ApiError && err.status === 401) {
-        // Don't log or set error state - user is being redirected
         return;
       }
-
-      const errorMessage = err instanceof ApiError ? err.message : 'Failed to fetch tasks';
+      const errorMessage =
+        err instanceof ApiError ? err.message : 'Failed to fetch tasks';
       setError(errorMessage);
       console.error('Error fetching tasks:', err);
     } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  /**
-   * Create a new task
-   */
-  const createTask = useCallback(async (data: TaskFormData): Promise<Task> => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const newTask = await apiClient.createTask(data);
-
-      // Optimistically update local state
-      setTasks((prevTasks) => [...prevTasks, newTask]);
-
-      return newTask;
-    } catch (err) {
-      const errorMessage = err instanceof ApiError ? err.message : 'Failed to create task';
-      setError(errorMessage);
-      console.error('Error creating task:', err);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  /**
-   * Update an existing task
-   */
-  const updateTask = useCallback(
-    async (id: string, data: Partial<TaskFormData> & { completed?: boolean }): Promise<Task> => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const updatedTask = await apiClient.updateTask(id, data);
-
-        // Optimistically update local state
-        setTasks((prevTasks) =>
-          prevTasks.map((task) => (task.id === id ? updatedTask : task))
-        );
-
-        return updatedTask;
-      } catch (err) {
-        const errorMessage = err instanceof ApiError ? err.message : 'Failed to update task';
-        setError(errorMessage);
-        console.error('Error updating task:', err);
-        throw err;
-      } finally {
+      setIsFetching(false);
+      if (!hasLoadedRef.current) {
+        hasLoadedRef.current = true;
         setIsLoading(false);
+      }
+    }
+  }, [effectiveFilters]);
+
+  /**
+   * Create a new task. Optimistically appends to local state.
+   */
+  const createTask = useCallback(
+    async (data: TaskFormData): Promise<Task> => {
+      setError(null);
+      try {
+        const newTask = await apiClient.createTask(data);
+        setTasks((prev) => [newTask, ...prev]);
+        return newTask;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : 'Failed to create task';
+        setError(msg);
+        throw err;
       }
     },
     []
   );
 
   /**
-   * Delete a task
+   * Update an existing task. Optimistic local state update on success.
+   */
+  const updateTask = useCallback(
+    async (
+      id: string,
+      data: Partial<TaskFormData> & { completed?: boolean }
+    ): Promise<Task> => {
+      setError(null);
+      try {
+        const updated = await apiClient.updateTask(id, data);
+        setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+        return updated;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : 'Failed to update task';
+        setError(msg);
+        throw err;
+      }
+    },
+    []
+  );
+
+  /**
+   * Delete a task. Optimistic local state update on success.
    */
   const deleteTask = useCallback(async (id: string): Promise<void> => {
-    setIsLoading(true);
     setError(null);
-
     try {
       await apiClient.deleteTask(id);
-
-      // Optimistically update local state
-      setTasks((prevTasks) => prevTasks.filter((task) => task.id !== id));
+      setTasks((prev) => prev.filter((t) => t.id !== id));
     } catch (err) {
-      const errorMessage = err instanceof ApiError ? err.message : 'Failed to delete task';
-      setError(errorMessage);
-      console.error('Error deleting task:', err);
+      const msg = err instanceof ApiError ? err.message : 'Failed to delete task';
+      setError(msg);
       throw err;
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
-  /**
-   * Refresh tasks (alias for getTasks)
-   */
   const refreshTasks = useCallback(async () => {
     await getTasks();
   }, [getTasks]);
 
-  /**
-   * Load tasks on mount
-   */
+  // Refetch whenever the effective filters change.
   useEffect(() => {
     getTasks();
   }, [getTasks]);
@@ -147,6 +161,7 @@ export function useTasks(): UseTasksReturn {
   return {
     tasks,
     isLoading,
+    isFetching,
     error,
     getTasks,
     createTask,

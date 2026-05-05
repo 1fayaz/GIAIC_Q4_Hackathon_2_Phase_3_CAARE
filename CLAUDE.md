@@ -585,10 +585,6 @@ Before marking any feature complete, verify:
 - Neon Serverless PostgreSQL (existing from Spec 1) + new users table (002-auth-integration)
 - TypeScript/JavaScript (Next.js 16+), React 18+ + Next.js 16+ (App Router), React 18+, Better Auth, Tailwind CSS (styling), Axios/Fetch (API client) (003-frontend-ui)
 - N/A (frontend only - backend API handles persistence via Neon PostgreSQL) (003-frontend-ui)
-- Python 3.11+ (backend/agent), TypeScript/JavaScript (frontend integration) + OpenAI Agents SDK, Official MCP SDK, FastAPI 0.109+, SQLModel 0.0.14+, asyncpg 0.29+, python-dotenv 1.0+ (004-ai-agent-mcp)
-- Neon Serverless PostgreSQL (existing from Phase 2, extended with conversation tables) (004-ai-agent-mcp)
-- TypeScript/JavaScript (Next.js 16+, React 18+) + Next.js 16+ (App Router), React 18+, OpenAI ChatKit, Better Auth client SDK, Axios/Fetch for API calls, Tailwind CSS (existing) (005-chatkit-frontend)
-- N/A (frontend only - backend API handles all persistence via Neon PostgreSQL) (005-chatkit-frontend)
 
 ## Recent Changes
 - 001-backend-foundation: Added backend foundation with FastAPI, SQLModel, asyncpg, UUID keys, and async testing strategy

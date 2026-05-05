@@ -51,51 +51,51 @@ export class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+        <div className="flex min-h-screen items-center justify-center px-4">
+          <div className="glass-strong w-full max-w-md animate-slideUp p-8 text-center">
             {/* Error icon */}
-            <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-6">
+            <div className="mx-auto mb-6 grid h-16 w-16 place-items-center rounded-full border border-rose-400/30 bg-rose-500/15 text-rose-200 shadow-[0_0_30px_-6px_rgba(244,63,94,0.5)]">
               <svg
-                className="h-8 w-8 text-red-600"
+                className="h-8 w-8"
+                viewBox="0 0 24 24"
                 fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+                aria-hidden="true"
               >
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                <path d="M12 9v4m0 4h.01" />
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
             </div>
 
-            {/* Error message */}
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            <h1 className="mb-2 text-2xl font-semibold text-white">
               Something went wrong
             </h1>
-            <p className="text-gray-600 mb-6">
-              We're sorry, but something unexpected happened. Please try again.
+            <p className="mb-6 text-sm text-slate-300/80">
+              We&apos;re sorry, but something unexpected happened. Please try
+              again.
             </p>
 
-            {/* Error details (development only) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
-              <div className="mb-6 p-4 bg-gray-100 rounded-lg text-left">
-                <p className="text-sm font-mono text-red-600 break-words">
+              <div className="mb-6 rounded-xl border border-white/10 bg-black/30 p-4 text-left">
+                <p className="break-words font-mono text-xs text-rose-300">
                   {this.state.error.message}
                 </p>
               </div>
             )}
 
-            {/* Actions */}
             <div className="flex flex-col gap-3">
               <Button variant="primary" onClick={this.handleReset} fullWidth>
-                Return to Home
+                Return home
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => window.location.reload()}
                 fullWidth
               >
-                Reload Page
+                Reload page
               </Button>
             </div>
           </div>
