@@ -1,50 +1,26 @@
-// Next.js middleware for route protection
-// Implements T015 from tasks.md
-// SECURITY: Uses httpOnly cookies for authentication (XSS protection)
+// Next.js middleware
+//
+// AUTH GATING INTENTIONALLY REMOVED (cross-domain cookie limitation):
+// The auth_token is an httpOnly cookie SET BY THE BACKEND, so it is scoped to
+// the backend's domain (e.g. *.hf.space), NOT the frontend's domain (Vercel).
+// Edge middleware runs on the frontend domain and can only read cookies scoped
+// to that domain, so `request.cookies.get('auth_token')` is ALWAYS empty here.
+// Gating on it caused an infinite /tasks -> /signin redirect loop even after a
+// successful login.
+//
+// Route protection is therefore handled CLIENT-SIDE instead:
+//   - app/(dashboard)/layout.tsx validates the session via /api/auth/session
+//     (credentials: 'include' sends the cross-domain cookie) and redirects to
+//     /signin when there is no authenticated user.
+//
+// This middleware is now a pass-through. Keep it so any future non-auth edge
+// logic has a home, and so the matcher config stays documented.
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-/**
- * Middleware to protect routes and handle authentication
- * Runs at the edge before any page renders
- * SECURITY: Checks for auth_token in httpOnly cookie
- */
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // SECURITY: Get token from httpOnly cookie (set by backend)
-  const token = request.cookies.get('auth_token')?.value;
-
-  // Define protected routes (require authentication)
-  const protectedRoutes = ['/tasks', '/dashboard'];
-
-  // Define auth routes (redirect to dashboard if already authenticated)
-  const authRoutes = ['/signin', '/signup'];
-
-  // Check if current path is protected
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
-
-  // Check if current path is an auth route
-  const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
-
-  // If accessing protected route without token, redirect to signin
-  if (isProtectedRoute && !token) {
-    const signinUrl = new URL('/signin', request.url);
-    // Add redirect parameter to return to original page after signin
-    signinUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(signinUrl);
-  }
-
-  // If accessing auth route with valid token, redirect to tasks
-  if (isAuthRoute && token) {
-    const tasksUrl = new URL('/tasks', request.url);
-    return NextResponse.redirect(tasksUrl);
-  }
-
-  // Allow request to proceed
+export function middleware(_request: NextRequest) {
+  // No auth gating here — see file header for why. Always continue.
   return NextResponse.next();
 }
 

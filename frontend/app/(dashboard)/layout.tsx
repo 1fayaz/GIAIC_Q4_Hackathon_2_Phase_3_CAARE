@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -17,6 +17,17 @@ export default function DashboardLayout({
   const { user, signOut, isLoading: authLoading } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
+  // CLIENT-SIDE ROUTE PROTECTION:
+  // The auth_token httpOnly cookie is scoped to the backend domain, so edge
+  // middleware on the frontend domain cannot read it. Once the session has
+  // finished loading (authLoading === false) and there is no authenticated
+  // user, redirect to /signin here instead.
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace('/signin');
+    }
+  }, [authLoading, user, router]);
+
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
@@ -30,7 +41,10 @@ export default function DashboardLayout({
     }
   };
 
-  if (authLoading) {
+  // Show the spinner while the session is loading OR while there is no user
+  // (the effect above is about to redirect to /signin) so protected content
+  // never flashes for an unauthenticated visitor.
+  if (authLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="glass animate-fadeIn px-10 py-8 text-center">
